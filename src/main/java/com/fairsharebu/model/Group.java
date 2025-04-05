@@ -16,6 +16,7 @@ public class Group {
     private LocalDateTime createdDate;
     private String groupImage;
     private String location; // e.g., "The House of Chow", "Snapeats"
+    private boolean privateGroup; // Whether the group is private (visible only to members)
 
     // Relationships
     private List<User> members;
@@ -28,6 +29,7 @@ public class Group {
         this.members = new ArrayList<>();
         this.expenses = new ArrayList<>();
         this.messages = new ArrayList<>();
+        this.privateGroup = false; // Default to public group
     }
 
     // Parameterized constructor
@@ -97,6 +99,14 @@ public class Group {
         this.location = location;
     }
 
+    public boolean isPrivateGroup() {
+        return privateGroup;
+    }
+
+    public void setPrivateGroup(boolean privateGroup) {
+        this.privateGroup = privateGroup;
+    }
+
     public List<User> getMembers() {
         return members;
     }
@@ -161,6 +171,7 @@ public class Group {
                 ", creator=" + (creator != null ? creator.getUsername() : "null") +
                 ", createdDate=" + createdDate +
                 ", location='" + location + '\'' +
+                ", privateGroup=" + privateGroup +
                 ", memberCount=" + (members != null ? members.size() : 0) +
                 '}';
     }

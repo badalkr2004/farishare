@@ -26,8 +26,12 @@ CREATE TABLE IF NOT EXISTS `groups` (
     createdDate TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     groupImage VARCHAR(255),
     location VARCHAR(100),
+    privateGroup BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (creatorId) REFERENCES `users`(userId)
 );
+
+-- Add privateGroup column if it doesn't exist
+ALTER TABLE `groups` ADD COLUMN IF NOT EXISTS privateGroup BOOLEAN DEFAULT FALSE;
 
 -- Create group_members junction table
 CREATE TABLE IF NOT EXISTS `group_members` (

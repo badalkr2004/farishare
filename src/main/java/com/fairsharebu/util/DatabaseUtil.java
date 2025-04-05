@@ -29,9 +29,9 @@ public class DatabaseUtil {
 
                     dataSource = new BasicDataSource();
                     dataSource.setUrl(
-                            "jdbc:mysql://localhost:3306/fairsharebu?useSSL=false&amp;allowPublicKeyRetrieval=true");
-                    dataSource.setUsername("fairshare");
-                    dataSource.setPassword("aryan");
+                            "jdbc:mysql://localhost:3306/fairsharebu?useSSL=false&allowPublicKeyRetrieval=true");
+                    dataSource.setUsername("root");
+                    dataSource.setPassword("mypass");
 
                     // Connection pool configuration
                     dataSource.setInitialSize(5);

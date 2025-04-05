@@ -46,7 +46,7 @@
         <div class="login-container">
             <div class="logo">
                 <h1>FairShareBU</h1>
-                <p class="text-muted">Split bills easily with your friends at Bennett University</p>
+                <p class="text-muted">Benett bills easily with your friends at Bennett University</p>
             </div>
             
             <c:if test="${not empty errorMessage}">

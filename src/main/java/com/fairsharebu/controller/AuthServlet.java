@@ -24,7 +24,11 @@ public class AuthServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        userDAO = new UserDAOImpl();
+        try {
+            userDAO = new UserDAOImpl();
+        } catch (SQLException e) {
+            throw new ServletException("Error initializing UserDAO", e);
+        }
     }
 
     @Override

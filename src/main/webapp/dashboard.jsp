@@ -172,6 +172,17 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Groups Card -->
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title"><i class="fas fa-users text-primary"></i> Groups</h5>
+                            <p class="card-text">Manage your expense sharing groups. Create new groups, add members, and track shared expenses.</p>
+                            <a href="${pageContext.request.contextPath}/groups/" class="btn btn-primary">View Groups</a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

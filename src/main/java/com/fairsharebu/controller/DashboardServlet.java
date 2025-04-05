@@ -11,6 +11,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.IOException;
+import java.sql.SQLException;
 
 /**
  * Servlet to handle the dashboard page.
@@ -21,7 +22,11 @@ public class DashboardServlet extends HttpServlet {
 
     @Override
     public void init() throws ServletException {
-        userDAO = new UserDAOImpl();
+        try {
+            userDAO = new UserDAOImpl();
+        } catch (SQLException e) {
+            throw new ServletException("Error initializing UserDAO", e);
+        }
     }
 
     @Override

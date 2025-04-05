@@ -6,13 +6,20 @@ import com.fairsharebu.util.DatabaseUtil;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Implementation of the UserDAO interface.
+ * Implementation of the UserDAO interface for user-related database operations
  */
 public class UserDAOImpl implements UserDAO {
+
+    private final Connection connection;
+
+    public UserDAOImpl() throws SQLException {
+        this.connection = DatabaseUtil.getConnection();
+    }
 
     /**
      * Insert a new user into the database.
@@ -20,41 +27,7 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public User insert(User user) throws SQLException {
-        String sql = "INSERT INTO users (username, email, password, fullName, phoneNumber, profilePicture, registrationDate, isActive) "
-                +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-
-            // Hash the password before storing
-            String hashedPassword = BCrypt.hashpw(user.getPassword(), BCrypt.gensalt());
-
-            stmt.setString(1, user.getUsername());
-            stmt.setString(2, user.getEmail());
-            stmt.setString(3, hashedPassword);
-            stmt.setString(4, user.getFullName());
-            stmt.setString(5, user.getPhoneNumber());
-            stmt.setString(6, user.getProfilePicture());
-            stmt.setTimestamp(7, Timestamp.valueOf(user.getRegistrationDate()));
-            stmt.setBoolean(8, user.isActive());
-
-            int affectedRows = stmt.executeUpdate();
-
-            if (affectedRows == 0) {
-                throw new SQLException("Creating user failed, no rows affected.");
-            }
-
-            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    user.setUserId(generatedKeys.getInt(1));
-                } else {
-                    throw new SQLException("Creating user failed, no ID obtained.");
-                }
-            }
-
-            return user;
-        }
+        return register(user);
     }
 
     /**
@@ -62,23 +35,7 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public boolean update(User user) throws SQLException {
-        String sql = "UPDATE users SET username = ?, email = ?, fullName = ?, phoneNumber = ?, " +
-                "profilePicture = ?, isActive = ? WHERE userId = ?";
-
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, user.getUsername());
-            stmt.setString(2, user.getEmail());
-            stmt.setString(3, user.getFullName());
-            stmt.setString(4, user.getPhoneNumber());
-            stmt.setString(5, user.getProfilePicture());
-            stmt.setBoolean(6, user.isActive());
-            stmt.setInt(7, user.getUserId());
-
-            int affectedRows = stmt.executeUpdate();
-            return affectedRows > 0;
-        }
+        return updateProfile(user);
     }
 
     /**
@@ -86,13 +43,10 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public boolean delete(Integer userId) throws SQLException {
-        String sql = "DELETE FROM users WHERE userId = ?";
+        String query = "DELETE FROM users WHERE userId = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setInt(1, userId);
-
             int affectedRows = stmt.executeUpdate();
             return affectedRows > 0;
         }
@@ -103,21 +57,19 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public User get(Integer userId) throws SQLException {
-        String sql = "SELECT * FROM users WHERE userId = ?";
+        String query = "SELECT * FROM users WHERE userId = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setInt(1, userId);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return extractUserFromResultSet(rs);
-                } else {
-                    return null;
                 }
             }
         }
+
+        return null;
     }
 
     /**
@@ -125,19 +77,18 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public List<User> getAll() throws SQLException {
-        String sql = "SELECT * FROM users";
         List<User> users = new ArrayList<>();
+        String query = "SELECT * FROM users ORDER BY fullName";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(sql)) {
+        try (PreparedStatement stmt = connection.prepareStatement(query);
+                ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
                 users.add(extractUserFromResultSet(rs));
             }
-
-            return users;
         }
+
+        return users;
     }
 
     /**
@@ -145,21 +96,19 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public User findByUsername(String username) throws SQLException {
-        String sql = "SELECT * FROM users WHERE username = ?";
+        String query = "SELECT * FROM users WHERE username = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, username);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return extractUserFromResultSet(rs);
-                } else {
-                    return null;
                 }
             }
         }
+
+        return null;
     }
 
     /**
@@ -167,21 +116,19 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public User findByEmail(String email) throws SQLException {
-        String sql = "SELECT * FROM users WHERE email = ?";
+        String query = "SELECT * FROM users WHERE email = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, email);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return extractUserFromResultSet(rs);
-                } else {
-                    return null;
                 }
             }
         }
+
+        return null;
     }
 
     /**
@@ -189,42 +136,24 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public User authenticate(String username, String password) throws SQLException {
-        String sql = "SELECT * FROM users WHERE username = ?";
+        User user = findByUsername(username);
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, username);
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    User user = extractUserFromResultSet(rs);
-                    String storedPassword = user.getPassword();
-
-                    // Check if the provided password matches the stored hash
-                    if (BCrypt.checkpw(password, storedPassword)) {
-                        return user;
-                    }
-                }
-                return null;
-            }
+        if (user != null && BCrypt.checkpw(password, user.getPassword())) {
+            return user;
         }
+
+        return null;
     }
 
     /**
      * Change a user's password.
      */
     @Override
-    public boolean changePassword(int userId, String newPassword) throws SQLException {
-        String sql = "UPDATE users SET password = ? WHERE userId = ?";
+    public boolean updatePassword(int userId, String newPassword) throws SQLException {
+        String query = "UPDATE users SET password = ? WHERE userId = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            // Hash the new password
-            String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt());
-
-            stmt.setString(1, hashedPassword);
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, BCrypt.hashpw(newPassword, BCrypt.gensalt()));
             stmt.setInt(2, userId);
 
             int affectedRows = stmt.executeUpdate();
@@ -237,11 +166,9 @@ public class UserDAOImpl implements UserDAO {
      */
     @Override
     public boolean updateProfile(User user) throws SQLException {
-        String sql = "UPDATE users SET fullName = ?, phoneNumber = ?, profilePicture = ? WHERE userId = ?";
+        String query = "UPDATE users SET fullName = ?, phoneNumber = ?, profilePicture = ? WHERE userId = ?";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(sql)) {
-
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
             stmt.setString(1, user.getFullName());
             stmt.setString(2, user.getPhoneNumber());
             stmt.setString(3, user.getProfilePicture());
@@ -259,18 +186,60 @@ public class UserDAOImpl implements UserDAO {
         User user = new User();
         user.setUserId(rs.getInt("userId"));
         user.setUsername(rs.getString("username"));
-        user.setEmail(rs.getString("email"));
         user.setPassword(rs.getString("password"));
+        user.setEmail(rs.getString("email"));
         user.setFullName(rs.getString("fullName"));
         user.setPhoneNumber(rs.getString("phoneNumber"));
         user.setProfilePicture(rs.getString("profilePicture"));
 
-        Timestamp registrationDate = rs.getTimestamp("registrationDate");
-        if (registrationDate != null) {
-            user.setRegistrationDate(registrationDate.toLocalDateTime());
+        // Convert java.sql.Timestamp to LocalDateTime
+        Timestamp timestamp = rs.getTimestamp("registrationDate");
+        if (timestamp != null) {
+            user.setRegistrationDate(timestamp.toLocalDateTime());
         }
 
         user.setActive(rs.getBoolean("isActive"));
+
+        return user;
+    }
+
+    @Override
+    public User register(User user) throws SQLException {
+        // Check if username or email already exists
+        if (findByUsername(user.getUsername()) != null) {
+            throw new SQLException("Username already exists");
+        }
+
+        if (findByEmail(user.getEmail()) != null) {
+            throw new SQLException("Email already exists");
+        }
+
+        String query = "INSERT INTO users (username, password, email, fullName, phoneNumber, profilePicture, registrationDate, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (PreparedStatement stmt = connection.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+            stmt.setString(1, user.getUsername());
+            stmt.setString(2, BCrypt.hashpw(user.getPassword(), BCrypt.gensalt()));
+            stmt.setString(3, user.getEmail());
+            stmt.setString(4, user.getFullName());
+            stmt.setString(5, user.getPhoneNumber());
+            stmt.setString(6, user.getProfilePicture());
+            stmt.setTimestamp(7, Timestamp.valueOf(LocalDateTime.now()));
+            stmt.setBoolean(8, true);
+
+            int affectedRows = stmt.executeUpdate();
+
+            if (affectedRows == 0) {
+                throw new SQLException("Creating user failed, no rows affected.");
+            }
+
+            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    user.setUserId(generatedKeys.getInt(1));
+                } else {
+                    throw new SQLException("Creating user failed, no ID obtained.");
+                }
+            }
+        }
 
         return user;
     }
