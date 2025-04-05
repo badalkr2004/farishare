@@ -44,7 +44,7 @@ To run this application, you need:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/fairsharebu.git
+git clone https://github.com/badalkr2004/farishare.git
 cd fairsharebu
 ```
 
