@@ -48,25 +48,25 @@ CREATE TABLE IF NOT EXISTS `expenses` (
     expenseId INT AUTO_INCREMENT PRIMARY KEY,
     description VARCHAR(255) NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
-    paidById INT NOT NULL,
-    groupId INT NOT NULL,
-    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    receiptImage VARCHAR(255),
-    paymentMethod VARCHAR(50),
+    paid_by INT NOT NULL,
+    group_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    receipt_image VARCHAR(255),
+    payment_method VARCHAR(50),
     status VARCHAR(20) DEFAULT 'PENDING',
-    FOREIGN KEY (paidById) REFERENCES `users`(userId),
-    FOREIGN KEY (groupId) REFERENCES `groups`(groupId)
+    FOREIGN KEY (paid_by) REFERENCES `users`(userId),
+    FOREIGN KEY (group_id) REFERENCES `groups`(groupId)
 );
 
 -- Create expense_participants junction table
 CREATE TABLE IF NOT EXISTS `expense_participants` (
-    expenseId INT NOT NULL,
-    userId INT NOT NULL,
-    share DECIMAL(10, 2) NOT NULL,
-    isPaid BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (expenseId, userId),
-    FOREIGN KEY (expenseId) REFERENCES `expenses`(expenseId),
-    FOREIGN KEY (userId) REFERENCES `users`(userId)
+    expense_id INT NOT NULL,
+    user_id INT NOT NULL,
+    share_amount DECIMAL(10, 2) NOT NULL,
+    is_paid BOOLEAN DEFAULT FALSE,
+    PRIMARY KEY (expense_id, user_id),
+    FOREIGN KEY (expense_id) REFERENCES `expenses`(expenseId),
+    FOREIGN KEY (user_id) REFERENCES `users`(userId)
 );
 
 -- Create messages table
@@ -83,14 +83,29 @@ CREATE TABLE IF NOT EXISTS `messages` (
 
 -- Create notifications table
 CREATE TABLE IF NOT EXISTS `notifications` (
-    notificationId INT AUTO_INCREMENT PRIMARY KEY,
-    recipientId INT NOT NULL,
-    type VARCHAR(50) NOT NULL,
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    title VARCHAR(100) NOT NULL,
     message TEXT NOT NULL,
     link VARCHAR(255),
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    isRead BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (recipientId) REFERENCES `users`(userId)
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES `users`(userId)
+);
+
+-- Create payments table
+CREATE TABLE IF NOT EXISTS `payments` (
+    payment_id INT PRIMARY KEY AUTO_INCREMENT,
+    payer_id INT NOT NULL,
+    receiver_id INT NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    description VARCHAR(255),
+    group_id INT NOT NULL,
+    payment_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) NOT NULL,
+    FOREIGN KEY (payer_id) REFERENCES users(userId),
+    FOREIGN KEY (receiver_id) REFERENCES users(userId),
+    FOREIGN KEY (group_id) REFERENCES `groups`(groupId)
 );
 
 -- Insert some sample data (optional)
@@ -113,11 +128,11 @@ INSERT INTO `group_members` (groupId, userId)
 VALUES (1, 1), (1, 2), (1, 3);
 
 -- Insert sample expense
-INSERT INTO `expenses` (description, amount, paidById, groupId, paymentMethod)
+INSERT INTO `expenses` (description, amount, paid_by, group_id, payment_method)
 VALUES ('Thursday Lunch', 450.00, 1, 1, 'Cash');
 
 -- Add expense participants and their shares
-INSERT INTO `expense_participants` (expenseId, userId, share)
+INSERT INTO `expense_participants` (expense_id, user_id, share_amount)
 VALUES (1, 1, 150.00), (1, 2, 150.00), (1, 3, 150.00);
 
 -- Insert sample message
@@ -125,8 +140,8 @@ INSERT INTO `messages` (senderId, groupId, content)
 VALUES (1, 1, 'I added the expense for our lunch today.');
 
 -- Insert sample notification
-INSERT INTO `notifications` (recipientId, type, message, link)
+INSERT INTO `notifications` (user_id, title, message, link)
 VALUES 
-(2, 'EXPENSE_ADDED', 'John Doe added an expense "Thursday Lunch" of ₹450.00 in group Lunch Buddies', '/expense?id=1'),
-(3, 'EXPENSE_ADDED', 'John Doe added an expense "Thursday Lunch" of ₹450.00 in group Lunch Buddies', '/expense?id=1');
+(2, 'New Expense', 'John Doe added an expense "Thursday Lunch" of ₹450.00 in group Lunch Buddies', '/expense?id=1'),
+(3, 'New Expense', 'John Doe added an expense "Thursday Lunch" of ₹450.00 in group Lunch Buddies', '/expense?id=1');
 */ 

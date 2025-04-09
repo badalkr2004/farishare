@@ -1,11 +1,10 @@
 package com.fairsharebu.controller;
 
-import com.fairsharebu.dao.GroupDAO;
-import com.fairsharebu.dao.GroupDAOImpl;
-import com.fairsharebu.dao.UserDAO;
-import com.fairsharebu.dao.UserDAOImpl;
+import com.fairsharebu.dao.*;
 import com.fairsharebu.model.Group;
 import com.fairsharebu.model.User;
+import com.fairsharebu.model.Expense;
+import com.fairsharebu.util.DatabaseUtil;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.MultipartConfig;
@@ -15,8 +14,11 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Controller to handle group-related requests and forward to appropriate JSP
@@ -28,6 +30,7 @@ public class GroupController extends HttpServlet {
 
     private GroupDAO groupDAO;
     private UserDAO userDAO;
+    private ExpenseDAO expenseDAO;
 
     @Override
     public void init() throws ServletException {
@@ -35,6 +38,7 @@ public class GroupController extends HttpServlet {
         try {
             groupDAO = new GroupDAOImpl();
             userDAO = new UserDAOImpl();
+            expenseDAO = new ExpenseDAOImpl();
         } catch (SQLException e) {
             throw new ServletException("Error initializing DAOs", e);
         }
@@ -43,7 +47,6 @@ public class GroupController extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        // Get session and check if user is logged in
         HttpSession session = request.getSession();
         User user = (User) session.getAttribute("user");
 
@@ -59,63 +62,102 @@ public class GroupController extends HttpServlet {
 
         try {
             if (pathInfo.equals("/") || pathInfo.equals("/list")) {
-                // List all groups the user is a member of
-                List<Group> userGroups = groupDAO.getGroupsByMember(user.getUserId());
-                request.setAttribute("groups", userGroups);
-                request.getRequestDispatcher("/WEB-INF/jsp/groups/list.jsp").forward(request, response);
+                handleListGroups(request, response, user);
             } else if (pathInfo.equals("/create")) {
-                // Show the create group form
-                request.getRequestDispatcher("/WEB-INF/jsp/groups/create.jsp").forward(request, response);
+                handleCreateForm(request, response);
             } else if (pathInfo.startsWith("/view/")) {
-                // View a specific group
-                int groupId = Integer.parseInt(pathInfo.substring(6));
-                Group group = groupDAO.getGroupById(groupId);
-
-                if (group == null) {
-                    request.setAttribute("errorMessage", "Group not found.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Check if the user is a member of the group
-                boolean isMember = groupDAO.isUserMemberOfGroup(user.getUserId(), groupId);
-
-                if (!isMember) {
-                    request.setAttribute("errorMessage", "You are not a member of this group.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                List<User> members = groupDAO.getGroupMembers(groupId);
-                request.setAttribute("group", group);
-                request.setAttribute("members", members);
-                request.getRequestDispatcher("/WEB-INF/jsp/groups/view.jsp").forward(request, response);
+                handleViewGroup(request, response, user, pathInfo);
             } else if (pathInfo.startsWith("/edit/")) {
-                // Edit a specific group
-                int groupId = Integer.parseInt(pathInfo.substring(6));
-                Group group = groupDAO.getGroupById(groupId);
-
-                if (group == null) {
-                    request.setAttribute("errorMessage", "Group not found.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Check if the user is the creator of the group
-                if (group.getCreator().getUserId() != user.getUserId()) {
-                    request.setAttribute("errorMessage", "You are not authorized to edit this group.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                request.setAttribute("group", group);
-                request.getRequestDispatcher("/WEB-INF/jsp/groups/edit.jsp").forward(request, response);
+                handleEditForm(request, response, user, pathInfo);
             } else {
-                // Invalid URL
                 response.sendError(HttpServletResponse.SC_NOT_FOUND);
             }
         } catch (SQLException e) {
             throw new ServletException("Database error", e);
+        }
+    }
+
+    private void handleListGroups(HttpServletRequest request, HttpServletResponse response, User user)
+            throws ServletException, IOException, SQLException {
+        List<Group> userGroups = groupDAO.getGroupsByMember(user.getUserId());
+        request.setAttribute("groups", userGroups);
+        request.getRequestDispatcher("/WEB-INF/jsp/groups/list.jsp").forward(request, response);
+    }
+
+    private void handleCreateForm(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        request.getRequestDispatcher("/WEB-INF/jsp/groups/create.jsp").forward(request, response);
+    }
+
+    private void handleViewGroup(HttpServletRequest request, HttpServletResponse response, User user, String pathInfo)
+            throws ServletException, IOException, SQLException {
+        try {
+            int groupId = Integer.parseInt(pathInfo.substring(6));
+            Group group = groupDAO.getGroupById(groupId);
+
+            if (group == null) {
+                request.setAttribute("errorMessage", "Group not found.");
+                request.getRequestDispatcher("/error.jsp").forward(request, response);
+                return;
+            }
+
+            // Check if the user is a member of the group
+            boolean isMember = groupDAO.isUserMemberOfGroup(user.getUserId(), groupId);
+
+            if (!isMember) {
+                request.setAttribute("errorMessage", "You are not a member of this group.");
+                request.getRequestDispatcher("/error.jsp").forward(request, response);
+                return;
+            }
+
+            // Get group members
+            List<User> members = groupDAO.getGroupMembers(groupId);
+
+            // Get recent expenses
+            List<Expense> recentExpenses = expenseDAO.getRecentExpensesByGroup(groupId, 5);
+
+            // Calculate balances for each member
+            Map<Integer, Double> balances = new HashMap<>();
+            for (User member : members) {
+                double owes = expenseDAO.getAmountOwedByUser(groupId, member.getUserId());
+                double isOwed = expenseDAO.getAmountOwedToUser(groupId, member.getUserId());
+                balances.put(member.getUserId(), isOwed - owes);
+            }
+
+            // Set attributes for the view
+            request.setAttribute("group", group);
+            request.setAttribute("members", members);
+            request.setAttribute("recentExpenses", recentExpenses);
+            request.setAttribute("balances", balances);
+            request.setAttribute("currentUser", user);
+
+            // Forward to the view page
+            request.getRequestDispatcher("/WEB-INF/jsp/groups/view.jsp").forward(request, response);
+        } catch (NumberFormatException e) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid group ID");
+        }
+    }
+
+    private void handleEditForm(HttpServletRequest request, HttpServletResponse response, User user, String pathInfo)
+            throws ServletException, IOException, SQLException {
+        try {
+            int groupId = Integer.parseInt(pathInfo.substring(6));
+            Group group = groupDAO.getGroupById(groupId);
+
+            if (group == null) {
+                request.setAttribute("errorMessage", "Group not found.");
+                request.getRequestDispatcher("/error.jsp").forward(request, response);
+                return;
+            }
+
+            if (group.getCreator().getUserId() != user.getUserId()) {
+                request.setAttribute("errorMessage", "You are not authorized to edit this group.");
+                request.getRequestDispatcher("/error.jsp").forward(request, response);
+                return;
+            }
+
+            request.setAttribute("group", group);
+            request.getRequestDispatcher("/WEB-INF/jsp/groups/edit.jsp").forward(request, response);
         } catch (NumberFormatException e) {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid group ID");
         }

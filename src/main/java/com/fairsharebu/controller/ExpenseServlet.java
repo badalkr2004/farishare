@@ -4,6 +4,7 @@ import com.fairsharebu.dao.*;
 import com.fairsharebu.model.Expense;
 import com.fairsharebu.model.Group;
 import com.fairsharebu.model.User;
+import com.fairsharebu.model.Notification;
 import com.fairsharebu.util.JWTUtil;
 
 import javax.servlet.ServletException;
@@ -22,6 +23,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,23 +58,82 @@ public class ExpenseServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        // Get session and check if user is logged in
         HttpSession session = request.getSession();
         User user = (User) session.getAttribute("user");
-
         if (user == null) {
-            response.sendRedirect(request.getContextPath() + "/login.jsp");
+            response.sendRedirect(request.getContextPath() + "/login");
             return;
         }
 
         String pathInfo = request.getPathInfo();
+        String action = request.getParameter("action");
 
         try {
-            if (pathInfo == null || pathInfo.equals("/") || pathInfo.equals("/list")) {
-                // List all expenses that the user is involved in
-                List<Expense> userExpenses = expenseDAO.getExpensesWhereUserParticipated(user.getUserId());
-                request.setAttribute("expenses", userExpenses);
+            if ("list".equals(action) || pathInfo == null || pathInfo.equals("/") || pathInfo.equals("/list")) {
+                int userId = user.getUserId();
+                // Get all expenses that involve the user
+                List<Expense> expenses = expenseDAO.getExpensesByUser(userId);
+                request.setAttribute("expenses", expenses);
+
+                // Filter expenses paid by the user
+                List<Expense> youPaidExpenses = expenses.stream()
+                        .filter(expense -> expense.getPaidBy().getUserId() == userId)
+                        .toList();
+                request.setAttribute("youPaidExpenses", youPaidExpenses);
+
+                // Filter expenses where the user owes money
+                List<Expense> youOweExpenses = expenses.stream()
+                        .filter(expense -> expense.getPaidBy().getUserId() != userId &&
+                                expense.getParticipants().stream()
+                                        .anyMatch(participant -> participant.getUserId() == userId))
+                        .toList();
+                request.setAttribute("youOweExpenses", youOweExpenses);
+
+                // Get all groups the user is a member of
+                List<Group> userGroups = groupDAO.getGroupsByMember(userId);
+
+                // Calculate totals if there are groups
+                if (!userGroups.isEmpty()) {
+                    double totalOwed = 0;
+                    double totalOwing = 0;
+
+                    for (Group group : userGroups) {
+                        totalOwed += expenseDAO.getAmountOwedByUser(group.getGroupId(), userId);
+                        totalOwing += expenseDAO.getAmountOwedToUser(group.getGroupId(), userId);
+                    }
+
+                    double netBalance = totalOwing - totalOwed;
+
+                    request.setAttribute("totalOwed", totalOwed);
+                    request.setAttribute("totalOwing", totalOwing);
+                    request.setAttribute("netBalance", netBalance);
+                }
+
+                // Get unread notifications count
+                List<Notification> notifications = notificationDAO.getNotificationsForUser(userId);
+                int unreadCount = 0;
+                for (Notification notification : notifications) {
+                    if (!notification.isRead()) {
+                        unreadCount++;
+                    }
+                }
+                request.setAttribute("unreadNotifications", unreadCount);
+
                 request.getRequestDispatcher("/WEB-INF/jsp/expenses/list.jsp").forward(request, response);
+            } else if ("create".equals(action)) {
+                int groupId = Integer.parseInt(request.getParameter("groupId"));
+                Group group = groupDAO.getGroupById(groupId);
+                request.setAttribute("group", group);
+                request.getRequestDispatcher("/WEB-INF/jsp/expenses/create.jsp").forward(request, response);
+            } else if ("view".equals(action)) {
+                int expenseId = Integer.parseInt(request.getParameter("id"));
+                Expense expense = expenseDAO.getExpenseById(expenseId);
+                if (expense == null) {
+                    response.sendError(HttpServletResponse.SC_NOT_FOUND);
+                    return;
+                }
+                request.setAttribute("expense", expense);
+                request.getRequestDispatcher("/WEB-INF/jsp/expenses/view.jsp").forward(request, response);
             } else if (pathInfo.equals("/create")) {
                 // Show the create expense form
                 // Get the group ID if provided
@@ -179,8 +241,8 @@ public class ExpenseServlet extends HttpServlet {
                 // Calculate balances for each user in the group
                 Map<Integer, Double> balances = new HashMap<>();
                 for (User member : members) {
-                    double owes = expenseDAO.calculateUserOwes(groupId, member.getUserId());
-                    double isOwed = expenseDAO.calculateUserIsOwed(groupId, member.getUserId());
+                    double owes = expenseDAO.getAmountOwedByUser(groupId, member.getUserId());
+                    double isOwed = expenseDAO.getAmountOwedToUser(groupId, member.getUserId());
                     balances.put(member.getUserId(), isOwed - owes);
                 }
 
@@ -222,7 +284,7 @@ public class ExpenseServlet extends HttpServlet {
                 }
 
                 // Calculate the settlement amount
-                double payerOwes = expenseDAO.calculateUserOwes(groupId, payerId);
+                double payerOwes = expenseDAO.getAmountOwedByUser(groupId, payerId);
 
                 request.setAttribute("group", group);
                 request.setAttribute("payer", payer);
@@ -244,329 +306,219 @@ public class ExpenseServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        // Get session and check if user is logged in
         HttpSession session = request.getSession();
         User user = (User) session.getAttribute("user");
-
         if (user == null) {
-            response.sendRedirect(request.getContextPath() + "/login.jsp");
+            response.sendRedirect(request.getContextPath() + "/login");
             return;
         }
 
-        String pathInfo = request.getPathInfo();
+        String action = request.getParameter("action");
 
         try {
-            if (pathInfo.equals("/create")) {
-                // Create a new expense
-                String description = request.getParameter("description");
-                double amount = Double.parseDouble(request.getParameter("amount"));
-                int groupId = Integer.parseInt(request.getParameter("groupId"));
-                String paymentMethod = request.getParameter("paymentMethod");
-                String splitMethod = request.getParameter("splitMethod");
-
-                if (description == null || description.trim().isEmpty()) {
-                    request.setAttribute("error", "Description is required");
-                    request.getRequestDispatcher("/WEB-INF/jsp/expenses/create.jsp").forward(request, response);
-                    return;
-                }
-
-                // Get the group
-                Group group = groupDAO.getGroupById(groupId);
-
-                if (group == null) {
-                    request.setAttribute("errorMessage", "Group not found.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Check if the user is a member of the group
-                List<User> members = groupDAO.getGroupMembers(groupId);
-                boolean isMember = members.stream().anyMatch(member -> member.getUserId() == user.getUserId());
-
-                if (!isMember) {
-                    request.setAttribute("errorMessage", "You are not a member of this group.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Create the expense
-                Expense expense = new Expense();
-                expense.setDescription(description);
-                expense.setAmount(amount);
-                expense.setPaidBy(user);
-                expense.setGroup(group);
-                expense.setPaymentMethod(paymentMethod);
-                expense.setStatus("PENDING");
-
-                // Handle receipt image upload if exists
-                Part filePart = request.getPart("receiptImage");
-                if (filePart != null && filePart.getSize() > 0) {
-                    String fileName = UUID.randomUUID().toString() + getFileExtension(filePart);
-                    String uploadDir = getServletContext().getRealPath("/") + "uploads/receipts/";
-
-                    // Create directories if they don't exist
-                    Files.createDirectories(Paths.get(uploadDir));
-
-                    // Save the file
-                    try (InputStream input = filePart.getInputStream()) {
-                        Files.copy(input, Paths.get(uploadDir, fileName), StandardCopyOption.REPLACE_EXISTING);
-                    }
-
-                    expense.setReceiptImage(fileName);
-                }
-
-                // Process the expense participants based on the split method
-                if ("equal".equals(splitMethod)) {
-                    // Equal split among selected participants
-                    String[] participantIds = request.getParameterValues("participants");
-
-                    if (participantIds != null && participantIds.length > 0) {
-                        List<User> participants = new ArrayList<>();
-                        for (String participantId : participantIds) {
-                            User participant = userDAO.get(Integer.parseInt(participantId));
-                            if (participant != null) {
-                                participants.add(participant);
-                                expense.addParticipant(participant);
-                            }
-                        }
-
-                        // Split equally
-                        expense.splitEqually();
-                    } else {
-                        // If no participants selected, split among all group members
-                        for (User member : members) {
-                            expense.addParticipant(member);
-                        }
-                        expense.splitEqually();
-                    }
-                } else if ("percentage".equals(splitMethod)) {
-                    // Percentage split
-                    Map<User, Double> percentages = new HashMap<>();
-
-                    for (User member : members) {
-                        String percentParam = request.getParameter("percent_" + member.getUserId());
-                        if (percentParam != null && !percentParam.isEmpty()) {
-                            double percent = Double.parseDouble(percentParam);
-                            if (percent > 0) {
-                                percentages.put(member, percent);
-                                expense.addParticipant(member);
-                            }
-                        }
-                    }
-
-                    expense.splitByPercentage(percentages);
-                } else if ("amount".equals(splitMethod)) {
-                    // Exact amount split
-                    Map<User, Double> specificAmounts = new HashMap<>();
-
-                    for (User member : members) {
-                        String amountParam = request.getParameter("amount_" + member.getUserId());
-                        if (amountParam != null && !amountParam.isEmpty()) {
-                            double memberAmount = Double.parseDouble(amountParam);
-                            if (memberAmount > 0) {
-                                specificAmounts.put(member, memberAmount);
-                                expense.addParticipant(member);
-                            }
-                        }
-                    }
-
-                    expense.splitByAmount(specificAmounts);
-                }
-
-                // Save the expense to the database
-                Expense createdExpense = expenseDAO.createExpense(expense);
-
-                // Create notifications for all participants
-                notificationDAO.createExpenseNotification(createdExpense.getExpenseId(), null);
-
-                response.sendRedirect(request.getContextPath() + "/expenses/view/" + createdExpense.getExpenseId());
-            } else if (pathInfo.startsWith("/edit/")) {
-                // Update an existing expense
-                int expenseId = Integer.parseInt(pathInfo.substring(6));
-                Expense expense = expenseDAO.getExpenseById(expenseId);
-
-                if (expense == null) {
-                    request.setAttribute("errorMessage", "Expense not found.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Check if the user is the one who paid the expense
-                if (expense.getPaidBy().getUserId() != user.getUserId()) {
-                    request.setAttribute("errorMessage", "You are not authorized to edit this expense.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                String description = request.getParameter("description");
-                double amount = Double.parseDouble(request.getParameter("amount"));
-                String paymentMethod = request.getParameter("paymentMethod");
-
-                if (description == null || description.trim().isEmpty()) {
-                    request.setAttribute("error", "Description is required");
-                    request.setAttribute("expense", expense);
-                    request.getRequestDispatcher("/WEB-INF/jsp/expenses/edit.jsp").forward(request, response);
-                    return;
-                }
-
-                expense.setDescription(description);
-                expense.setAmount(amount);
-                expense.setPaymentMethod(paymentMethod);
-
-                // Handle receipt image upload if exists
-                Part filePart = request.getPart("receiptImage");
-                if (filePart != null && filePart.getSize() > 0) {
-                    String fileName = UUID.randomUUID().toString() + getFileExtension(filePart);
-                    String uploadDir = getServletContext().getRealPath("/") + "uploads/receipts/";
-
-                    // Create directories if they don't exist
-                    Files.createDirectories(Paths.get(uploadDir));
-
-                    // Save the file
-                    try (InputStream input = filePart.getInputStream()) {
-                        Files.copy(input, Paths.get(uploadDir, fileName), StandardCopyOption.REPLACE_EXISTING);
-                    }
-
-                    // Delete old receipt image if exists
-                    if (expense.getReceiptImage() != null && !expense.getReceiptImage().isEmpty()) {
-                        File oldFile = new File(uploadDir, expense.getReceiptImage());
-                        if (oldFile.exists()) {
-                            oldFile.delete();
-                        }
-                    }
-
-                    expense.setReceiptImage(fileName);
-                }
-
-                // Update the expense in the database
-                expenseDAO.updateExpense(expense);
-
-                response.sendRedirect(request.getContextPath() + "/expenses/view/" + expense.getExpenseId());
-            } else if (pathInfo.equals("/settle")) {
-                // Process a settlement
-                int groupId = Integer.parseInt(request.getParameter("groupId"));
-                int payerId = Integer.parseInt(request.getParameter("payerId"));
-                int receiverId = Integer.parseInt(request.getParameter("receiverId"));
-                double amount = Double.parseDouble(request.getParameter("amount"));
-                String paymentMethod = request.getParameter("paymentMethod");
-
-                // Check if the current user is the payer
-                if (payerId != user.getUserId()) {
-                    request.setAttribute("errorMessage", "You can only settle your own payments.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Get the group
-                Group group = groupDAO.getGroupById(groupId);
-
-                if (group == null) {
-                    request.setAttribute("errorMessage", "Group not found.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Get the users involved in the settlement
-                User payer = userDAO.get(payerId);
-                User receiver = userDAO.get(receiverId);
-
-                if (payer == null || receiver == null) {
-                    request.setAttribute("errorMessage", "Invalid users for settlement.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Create a settlement expense (marked as SETTLED)
-                Expense settlement = new Expense();
-                settlement.setDescription("Settlement payment");
-                settlement.setAmount(amount);
-                settlement.setPaidBy(payer);
-                settlement.setGroup(group);
-                settlement.setPaymentMethod(paymentMethod);
-                settlement.setStatus("SETTLED");
-
-                // Add the receiver as the only participant with full amount
-                settlement.addParticipant(receiver);
-                settlement.setShare(receiver, amount);
-
-                // Save the settlement to the database
-                Expense createdSettlement = expenseDAO.createExpense(settlement);
-
-                // Mark the participants as paid for relevant expenses
-                // This is a simplified version; in a real application,
-                // you might want to track which specific expense amounts were settled
-                List<Expense> expenses = expenseDAO.getExpensesByGroup(groupId);
-                for (Expense expense : expenses) {
-                    if (expense.getPaidBy().getUserId() == receiverId &&
-                            expense.getParticipants().stream().anyMatch(p -> p.getUserId() == payerId)) {
-
-                        expenseDAO.updateParticipantPaidStatus(expense.getExpenseId(), payerId, true);
-                    }
-                }
-
-                // Create a notification for the receiver
-                String message = payer.getFullName() + " has settled payment of ₹" + amount + " in group "
-                        + group.getName();
-                notificationDAO.createGroupNotification(groupId, message,
-                        "/expenses/view/" + createdSettlement.getExpenseId(), payerId);
-
-                response.sendRedirect(request.getContextPath() + "/expenses/group?id=" + groupId);
-            } else if (pathInfo.equals("/delete")) {
-                // Delete an expense
-                int expenseId = Integer.parseInt(request.getParameter("expenseId"));
-                Expense expense = expenseDAO.getExpenseById(expenseId);
-
-                if (expense == null) {
-                    request.setAttribute("errorMessage", "Expense not found.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Check if the user is the one who paid the expense
-                if (expense.getPaidBy().getUserId() != user.getUserId()) {
-                    request.setAttribute("errorMessage", "You are not authorized to delete this expense.");
-                    request.getRequestDispatcher("/error.jsp").forward(request, response);
-                    return;
-                }
-
-                // Delete the expense from the database
-                expenseDAO.deleteExpense(expenseId);
-
-                // Delete receipt image if exists
-                if (expense.getReceiptImage() != null && !expense.getReceiptImage().isEmpty()) {
-                    String uploadDir = getServletContext().getRealPath("/") + "uploads/receipts/";
-                    File receiptFile = new File(uploadDir, expense.getReceiptImage());
-                    if (receiptFile.exists()) {
-                        receiptFile.delete();
-                    }
-                }
-
-                // Redirect to the group expenses page
-                int groupId = expense.getGroup().getGroupId();
-                response.sendRedirect(request.getContextPath() + "/expenses/group?id=" + groupId);
+            if ("create".equals(action)) {
+                handleCreateExpense(request, response, user);
+            } else if ("update".equals(action)) {
+                handleUpdateExpense(request, response, user);
+            } else if ("delete".equals(action)) {
+                handleDeleteExpense(request, response, user);
+            } else if ("settle".equals(action)) {
+                handleSettleExpense(request, response, user);
             } else {
                 // Invalid URL
                 response.sendError(HttpServletResponse.SC_NOT_FOUND);
             }
         } catch (SQLException e) {
             throw new ServletException("Database error", e);
-        } catch (NumberFormatException e) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
         }
+    }
+
+    private void handleCreateExpense(HttpServletRequest request, HttpServletResponse response, User user)
+            throws ServletException, IOException, SQLException {
+        String description = request.getParameter("description");
+        double amount = Double.parseDouble(request.getParameter("amount"));
+        int groupId = Integer.parseInt(request.getParameter("groupId"));
+        String paymentMethod = request.getParameter("paymentMethod");
+        String splitMethod = request.getParameter("splitMethod");
+
+        if (description == null || description.trim().isEmpty()) {
+            request.setAttribute("error", "Description is required");
+            request.getRequestDispatcher("/WEB-INF/jsp/expenses/create.jsp").forward(request, response);
+            return;
+        }
+
+        Group group = groupDAO.getGroupById(groupId);
+        if (group == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND, "Group not found");
+            return;
+        }
+
+        Expense expense = new Expense();
+        expense.setDescription(description);
+        expense.setAmount(amount);
+        expense.setPaidBy(user);
+        expense.setGroup(group);
+        expense.setPaymentMethod(paymentMethod);
+        expense.setStatus("PENDING");
+
+        // Handle receipt image upload
+        Part filePart = request.getPart("receiptImage");
+        if (filePart != null && filePart.getSize() > 0) {
+            String fileName = UUID.randomUUID().toString() + getFileExtension(filePart);
+            String uploadDir = getServletContext().getRealPath("/") + "uploads/receipts/";
+            Files.createDirectories(Paths.get(uploadDir));
+            try (InputStream input = filePart.getInputStream()) {
+                Files.copy(input, Paths.get(uploadDir, fileName), StandardCopyOption.REPLACE_EXISTING);
+            }
+            expense.setReceiptImage(fileName);
+        }
+
+        // Handle expense splitting
+        List<User> members = groupDAO.getGroupMembers(groupId);
+        if ("equal".equals(splitMethod)) {
+            expense.addParticipants(members);
+            expense.splitEqually();
+        } else if ("percentage".equals(splitMethod)) {
+            Map<User, Double> percentages = new HashMap<>();
+            for (User member : members) {
+                String percentStr = request.getParameter("percent_" + member.getUserId());
+                if (percentStr != null && !percentStr.isEmpty()) {
+                    double percent = Double.parseDouble(percentStr);
+                    if (percent > 0) {
+                        percentages.put(member, percent);
+                        expense.addParticipant(member);
+                    }
+                }
+            }
+            expense.splitByPercentage(percentages);
+        } else if ("amount".equals(splitMethod)) {
+            Map<User, Double> amounts = new HashMap<>();
+            for (User member : members) {
+                String amountStr = request.getParameter("amount_" + member.getUserId());
+                if (amountStr != null && !amountStr.isEmpty()) {
+                    double memberAmount = Double.parseDouble(amountStr);
+                    if (memberAmount > 0) {
+                        amounts.put(member, memberAmount);
+                        expense.addParticipant(member);
+                    }
+                }
+            }
+            expense.splitByAmount(amounts);
+        }
+
+        expenseDAO.addExpense(expense);
+        response.sendRedirect(request.getContextPath() + "/expenses?action=view&id=" + expense.getExpenseId());
+    }
+
+    private void handleUpdateExpense(HttpServletRequest request, HttpServletResponse response, User user)
+            throws ServletException, IOException, SQLException {
+        int expenseId = Integer.parseInt(request.getParameter("id"));
+        Expense expense = expenseDAO.getExpenseById(expenseId);
+
+        if (expense == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
+        if (expense.getPaidBy().getUserId() != user.getUserId()) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+
+        String description = request.getParameter("description");
+        double amount = Double.parseDouble(request.getParameter("amount"));
+        String paymentMethod = request.getParameter("paymentMethod");
+
+        expense.setDescription(description);
+        expense.setAmount(amount);
+        expense.setPaymentMethod(paymentMethod);
+
+        // Handle receipt image
+        Part filePart = request.getPart("receiptImage");
+        if (filePart != null && filePart.getSize() > 0) {
+            String fileName = UUID.randomUUID().toString() + getFileExtension(filePart);
+            String uploadDir = getServletContext().getRealPath("/") + "uploads/receipts/";
+            Files.createDirectories(Paths.get(uploadDir));
+
+            // Delete old receipt if exists
+            if (expense.getReceiptImage() != null) {
+                Files.deleteIfExists(Paths.get(uploadDir, expense.getReceiptImage()));
+            }
+
+            // Save new receipt
+            try (InputStream input = filePart.getInputStream()) {
+                Files.copy(input, Paths.get(uploadDir, fileName), StandardCopyOption.REPLACE_EXISTING);
+            }
+            expense.setReceiptImage(fileName);
+        }
+
+        expenseDAO.updateExpense(expense);
+        response.sendRedirect(request.getContextPath() + "/expenses?action=view&id=" + expenseId);
+    }
+
+    private void handleDeleteExpense(HttpServletRequest request, HttpServletResponse response, User user)
+            throws ServletException, IOException, SQLException {
+        int expenseId = Integer.parseInt(request.getParameter("id"));
+        Expense expense = expenseDAO.getExpenseById(expenseId);
+
+        if (expense == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
+        if (expense.getPaidBy().getUserId() != user.getUserId()) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN);
+            return;
+        }
+
+        // Delete receipt file if exists
+        if (expense.getReceiptImage() != null) {
+            String uploadDir = getServletContext().getRealPath("/") + "uploads/receipts/";
+            Files.deleteIfExists(Paths.get(uploadDir, expense.getReceiptImage()));
+        }
+
+        expenseDAO.deleteExpense(expenseId);
+        response.sendRedirect(request.getContextPath() + "/expenses?action=list");
+    }
+
+    private void handleSettleExpense(HttpServletRequest request, HttpServletResponse response, User user)
+            throws ServletException, IOException, SQLException {
+        int expenseId = Integer.parseInt(request.getParameter("id"));
+        Expense expense = expenseDAO.getExpenseById(expenseId);
+
+        if (expense == null) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
+        int userId = user.getUserId();
+        int groupId = Integer.parseInt(request.getParameter("groupId"));
+
+        // Calculate amounts for the settlement
+        double amountOwed = expenseDAO.getAmountOwedByUser(groupId, userId);
+        double amountToReceive = expenseDAO.getAmountOwedToUser(groupId, userId);
+
+        if (amountOwed <= 0) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "No amount to settle");
+            return;
+        }
+
+        // Process the settlement logic here
+        // You might want to create a new transaction or mark expenses as settled
+
+        response.sendRedirect(request.getContextPath() + "/expenses?action=list&groupId=" + groupId);
     }
 
     private String getFileExtension(Part part) {
         String contentDisp = part.getHeader("content-disposition");
-        String[] items = contentDisp.split(";");
-
-        for (String item : items) {
-            if (item.trim().startsWith("filename")) {
-                String fileName = item.substring(item.indexOf("=") + 2, item.length() - 1);
-                int dotIndex = fileName.lastIndexOf(".");
-                return (dotIndex > 0) ? fileName.substring(dotIndex) : "";
+        String[] tokens = contentDisp.split(";");
+        for (String token : tokens) {
+            if (token.trim().startsWith("filename")) {
+                String filename = token.substring(token.indexOf("=") + 2, token.length() - 1);
+                int dotIndex = filename.lastIndexOf('.');
+                return dotIndex > 0 ? filename.substring(dotIndex) : "";
             }
         }
-
         return "";
     }
 }

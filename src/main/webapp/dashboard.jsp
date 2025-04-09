@@ -76,22 +76,27 @@
                 </div>
                 <ul class="nav flex-column">
                     <li class="nav-item">
-                        <a class="nav-link active" href="#"><i class="fas fa-home"></i> Dashboard</a>
+                        <a class="nav-link active" href="${pageContext.request.contextPath}/dashboard"><i class="fas fa-home"></i> Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-users"></i> Groups</a>
+                        <a class="nav-link" href="${pageContext.request.contextPath}/groups"><i class="fas fa-users"></i> Groups</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-money-bill-wave"></i> Expenses</a>
+                        <a class="nav-link" href="${pageContext.request.contextPath}/expenses"><i class="fas fa-money-bill-wave"></i> Expenses</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-calculator"></i> Settle Up</a>
+                        <a class="nav-link" href="${pageContext.request.contextPath}/payments"><i class="fas fa-exchange-alt"></i> Payments</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-bell"></i> Notifications</a>
+                        <a class="nav-link" href="${pageContext.request.contextPath}/notifications">
+                            <i class="fas fa-bell"></i> Notifications
+                            <c:if test="${unreadNotifications > 0}">
+                                <span class="badge bg-danger rounded-pill">${unreadNotifications}</span>
+                            </c:if>
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-user"></i> Profile</a>
+                        <a class="nav-link" href="${pageContext.request.contextPath}/profile"><i class="fas fa-user"></i> Profile</a>
                     </li>
                     <li class="nav-item mt-5">
                         <a class="nav-link" href="${pageContext.request.contextPath}/auth/logout"><i class="fas fa-sign-out-alt"></i> Logout</a>
@@ -104,6 +109,41 @@
                 <div class="user-welcome">
                     <h2>Welcome, ${user.fullName}!</h2>
                     <p>Here's a summary of your expenses and groups.</p>
+                </div>
+                
+                <div class="row">
+                    <!-- Quick Actions -->
+                    <div class="col-md-12 mb-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Quick Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <a href="${pageContext.request.contextPath}/expenses/create" class="btn btn-primary w-100 mb-2">
+                                            <i class="fas fa-plus"></i> Add Expense
+                                        </a>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <a href="${pageContext.request.contextPath}/payments/create" class="btn btn-success w-100 mb-2">
+                                            <i class="fas fa-money-bill"></i> Make Payment
+                                        </a>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <a href="${pageContext.request.contextPath}/groups/create" class="btn btn-info w-100 mb-2">
+                                            <i class="fas fa-users"></i> Create Group
+                                        </a>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <a href="${pageContext.request.contextPath}/expenses/settle" class="btn btn-warning w-100 mb-2">
+                                            <i class="fas fa-calculator"></i> Settle Up
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="row">
@@ -180,6 +220,67 @@
                             <h5 class="card-title"><i class="fas fa-users text-primary"></i> Groups</h5>
                             <p class="card-text">Manage your expense sharing groups. Create new groups, add members, and track shared expenses.</p>
                             <a href="${pageContext.request.contextPath}/groups/" class="btn btn-primary">View Groups</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5><i class="fas fa-bell"></i> Recent Notifications</h5>
+                                <a href="${pageContext.request.contextPath}/notifications" class="btn btn-sm btn-link">View All</a>
+                            </div>
+                            <div class="card-body">
+                                <c:choose>
+                                    <c:when test="${not empty recentNotifications}">
+                                        <c:forEach items="${recentNotifications}" var="notification">
+                                            <div class="notification-item p-2 border-bottom">
+                                                <p class="mb-1">${notification.message}</p>
+                                                <small class="text-muted">${notification.createdAt}</small>
+                                            </div>
+                                        </c:forEach>
+                                    </c:when>
+                                    <c:otherwise>
+                                        <p class="text-muted">No new notifications</p>
+                                    </c:otherwise>
+                                </c:choose>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5><i class="fas fa-exchange-alt"></i> Recent Payments</h5>
+                                <a href="${pageContext.request.contextPath}/payments" class="btn btn-sm btn-link">View All</a>
+                            </div>
+                            <div class="card-body">
+                                <c:choose>
+                                    <c:when test="${not empty recentPayments}">
+                                        <c:forEach items="${recentPayments}" var="payment">
+                                            <div class="payment-item p-2 border-bottom">
+                                                <p class="mb-1">
+                                                    <c:choose>
+                                                        <c:when test="${payment.payer.userId eq user.userId}">
+                                                            You paid ${payment.receiver.fullName}
+                                                        </c:when>
+                                                        <c:otherwise>
+                                                            ${payment.payer.fullName} paid you
+                                                        </c:otherwise>
+                                                    </c:choose>
+                                                    <span class="float-end">₹${payment.amount}</span>
+                                                </p>
+                                                <small class="text-muted">${payment.paymentDate}</small>
+                                            </div>
+                                        </c:forEach>
+                                    </c:when>
+                                    <c:otherwise>
+                                        <p class="text-muted">No recent payments</p>
+                                    </c:otherwise>
+                                </c:choose>
+                            </div>
                         </div>
                     </div>
                 </div>

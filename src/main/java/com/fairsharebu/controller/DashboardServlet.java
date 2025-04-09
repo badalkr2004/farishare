@@ -1,8 +1,7 @@
 package com.fairsharebu.controller;
 
-import com.fairsharebu.dao.UserDAO;
-import com.fairsharebu.dao.UserDAOImpl;
-import com.fairsharebu.model.User;
+import com.fairsharebu.dao.*;
+import com.fairsharebu.model.*;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
@@ -12,6 +11,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.List;
 
 /**
  * Servlet to handle the dashboard page.
@@ -19,13 +19,21 @@ import java.sql.SQLException;
 @WebServlet(name = "DashboardServlet", urlPatterns = { "/dashboard" })
 public class DashboardServlet extends HttpServlet {
     private UserDAO userDAO;
+    private GroupDAO groupDAO;
+    private ExpenseDAO expenseDAO;
+    private PaymentDAO paymentDAO;
+    private NotificationDAO notificationDAO;
 
     @Override
     public void init() throws ServletException {
         try {
             userDAO = new UserDAOImpl();
+            groupDAO = new GroupDAOImpl();
+            expenseDAO = new ExpenseDAOImpl();
+            paymentDAO = new PaymentDAOImpl();
+            notificationDAO = new NotificationDAOImpl();
         } catch (SQLException e) {
-            throw new ServletException("Error initializing UserDAO", e);
+            throw new ServletException("Error initializing DAOs", e);
         }
     }
 
@@ -54,6 +62,48 @@ public class DashboardServlet extends HttpServlet {
 
             // Set user in request for dashboard.jsp
             request.setAttribute("user", user);
+
+            // Get user's groups
+            List<Group> userGroups = groupDAO.getGroupsByMember(userId);
+            request.setAttribute("userGroups", userGroups);
+
+            // Get recent expenses
+            List<Expense> recentExpenses = expenseDAO.getExpensesByUser(userId);
+            request.setAttribute("recentExpenses", recentExpenses);
+
+            // Get recent payments
+            List<Payment> recentPayments = paymentDAO.getPaymentsByUser(userId);
+            request.setAttribute("recentPayments", recentPayments);
+
+            // Get recent notifications
+            List<Notification> recentNotifications = notificationDAO.getNotificationsForUser(userId);
+            request.setAttribute("recentNotifications", recentNotifications);
+
+            // Count unread notifications
+            int unreadCount = 0;
+            for (Notification notification : recentNotifications) {
+                if (!notification.isRead()) {
+                    unreadCount++;
+                }
+            }
+            request.setAttribute("unreadNotifications", unreadCount);
+
+            // Calculate balances if there are groups
+            if (!userGroups.isEmpty()) {
+                double totalOwed = 0;
+                double totalOwing = 0;
+
+                for (Group group : userGroups) {
+                    totalOwed += expenseDAO.getAmountOwedByUser(group.getGroupId(), userId);
+                    totalOwing += expenseDAO.getAmountOwedToUser(group.getGroupId(), userId);
+                }
+
+                double netBalance = totalOwing - totalOwed;
+
+                request.setAttribute("totalOwed", totalOwed);
+                request.setAttribute("totalOwing", totalOwing);
+                request.setAttribute("netBalance", netBalance);
+            }
 
             // Forward to dashboard
             request.getRequestDispatcher("/dashboard.jsp").forward(request, response);

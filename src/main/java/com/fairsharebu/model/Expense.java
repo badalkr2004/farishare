@@ -16,7 +16,7 @@ public class Expense {
     private double amount;
     private User paidBy;
     private Group group;
-    private LocalDateTime date;
+    private LocalDateTime createdAt;
     private String receiptImage;
     private String paymentMethod; // e.g., "Cash", "UPI", "Card"
     private String status; // "PENDING", "SETTLED"
@@ -27,7 +27,7 @@ public class Expense {
 
     // Default constructor
     public Expense() {
-        this.date = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now();
         this.participants = new ArrayList<>();
         this.shares = new HashMap<>();
         this.status = "PENDING";
@@ -92,12 +92,21 @@ public class Expense {
         this.group = group;
     }
 
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    // For backward compatibility with existing code
     public LocalDateTime getDate() {
-        return date;
+        return createdAt;
     }
 
     public void setDate(LocalDateTime date) {
-        this.date = date;
+        this.createdAt = date;
     }
 
     public String getReceiptImage() {
@@ -229,7 +238,7 @@ public class Expense {
                 ", amount=" + amount +
                 ", paidBy=" + (paidBy != null ? paidBy.getUsername() : "null") +
                 ", group=" + (group != null ? group.getName() : "null") +
-                ", date=" + date +
+                ", createdAt=" + createdAt +
                 ", paymentMethod='" + paymentMethod + '\'' +
                 ", status='" + status + '\'' +
                 ", participantCount=" + (participants != null ? participants.size() : 0) +

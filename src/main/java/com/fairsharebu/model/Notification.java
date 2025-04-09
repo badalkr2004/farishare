@@ -1,32 +1,23 @@
 package com.fairsharebu.model;
 
-import java.time.LocalDateTime;
+import java.util.Date;
 
 /**
  * Represents a notification in the FairShareBU system.
  */
 public class Notification {
     private int notificationId;
-    private User recipient;
-    private String type; // "EXPENSE_ADDED", "EXPENSE_SETTLED", "GROUP_INVITATION", "PAYMENT_REMINDER"
+    private int userId;
+    private String title;
     private String message;
     private String link; // Link to redirect when clicked on the notification
-    private LocalDateTime timestamp;
+    private Date createdAt;
     private boolean isRead;
 
     // Default constructor
     public Notification() {
-        this.timestamp = LocalDateTime.now();
+        this.createdAt = new Date();
         this.isRead = false;
-    }
-
-    // Parameterized constructor
-    public Notification(User recipient, String type, String message, String link) {
-        this();
-        this.recipient = recipient;
-        this.type = type;
-        this.message = message;
-        this.link = link;
     }
 
     // Getters and Setters
@@ -38,20 +29,20 @@ public class Notification {
         this.notificationId = notificationId;
     }
 
-    public User getRecipient() {
-        return recipient;
+    public int getUserId() {
+        return userId;
     }
 
-    public void setRecipient(User recipient) {
-        this.recipient = recipient;
+    public void setUserId(int userId) {
+        this.userId = userId;
     }
 
-    public String getType() {
-        return type;
+    public String getTitle() {
+        return title;
     }
 
-    public void setType(String type) {
-        this.type = type;
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     public String getMessage() {
@@ -70,12 +61,12 @@ public class Notification {
         this.link = link;
     }
 
-    public LocalDateTime getTimestamp() {
-        return timestamp;
+    public Date getCreatedAt() {
+        return createdAt;
     }
 
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
     }
 
     public boolean isRead() {
@@ -100,7 +91,13 @@ public class Notification {
 
         String link = "/expense?id=" + expense.getExpenseId();
 
-        return new Notification(recipient, "EXPENSE_ADDED", message, link);
+        Notification notification = new Notification();
+        notification.setUserId(recipient.getUserId());
+        notification.setMessage(message);
+        notification.setLink(link);
+        notification.setRead(false);
+
+        return notification;
     }
 
     /**
@@ -118,7 +115,13 @@ public class Notification {
 
         String link = "/expense?id=" + expense.getExpenseId();
 
-        return new Notification(recipient, "PAYMENT_REMINDER", message, link);
+        Notification notification = new Notification();
+        notification.setUserId(recipient.getUserId());
+        notification.setMessage(message);
+        notification.setLink(link);
+        notification.setRead(false);
+
+        return notification;
     }
 
     /**
@@ -135,7 +138,13 @@ public class Notification {
 
         String link = "/group?id=" + group.getGroupId();
 
-        return new Notification(recipient, "GROUP_INVITATION", message, link);
+        Notification notification = new Notification();
+        notification.setUserId(recipient.getUserId());
+        notification.setMessage(message);
+        notification.setLink(link);
+        notification.setRead(false);
+
+        return notification;
     }
 
     /**
@@ -149,10 +158,11 @@ public class Notification {
     public String toString() {
         return "Notification{" +
                 "notificationId=" + notificationId +
-                ", recipient=" + (recipient != null ? recipient.getUsername() : "null") +
-                ", type='" + type + '\'' +
+                ", userId=" + userId +
+                ", title='" + title + '\'' +
                 ", message='" + message + '\'' +
-                ", timestamp=" + timestamp +
+                ", link='" + link + '\'' +
+                ", createdAt=" + createdAt +
                 ", isRead=" + isRead +
                 '}';
     }
