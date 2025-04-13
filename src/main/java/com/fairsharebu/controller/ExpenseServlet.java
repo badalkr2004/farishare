@@ -255,6 +255,7 @@ public class ExpenseServlet extends HttpServlet {
                 int groupId = Integer.parseInt(request.getParameter("groupId"));
                 int payerId = Integer.parseInt(request.getParameter("payerId"));
                 int receiverId = Integer.parseInt(request.getParameter("receiverId"));
+                double amount = Double.parseDouble(request.getParameter("amount"));
 
                 Group group = groupDAO.getGroupById(groupId);
 
@@ -536,7 +537,7 @@ public class ExpenseServlet extends HttpServlet {
             // Add the expense to the database
             expenseDAO.addExpense(expense);
 
-            response.sendRedirect("group?action=view&groupId=" + groupId);
+            response.sendRedirect(request.getContextPath() + "/expenses/group?id=" + groupId);
         } catch (SQLException | NumberFormatException e) {
             throw new ServletException("Error handling settle expense", e);
         }

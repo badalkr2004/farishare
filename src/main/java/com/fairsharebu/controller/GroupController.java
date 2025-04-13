@@ -4,6 +4,7 @@ import com.fairsharebu.dao.*;
 import com.fairsharebu.model.Group;
 import com.fairsharebu.model.User;
 import com.fairsharebu.model.Expense;
+import com.fairsharebu.model.Balance;
 import com.fairsharebu.util.DatabaseUtil;
 
 import javax.servlet.ServletException;
@@ -19,6 +20,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 /**
  * Controller to handle group-related requests and forward to appropriate JSP
@@ -117,11 +119,12 @@ public class GroupController extends HttpServlet {
             List<Expense> recentExpenses = expenseDAO.getRecentExpensesByGroup(groupId, 5);
 
             // Calculate balances for each member
-            Map<Integer, Double> balances = new HashMap<>();
+            List<Balance> balances = new ArrayList<>();
             for (User member : members) {
                 double owes = expenseDAO.getAmountOwedByUser(groupId, member.getUserId());
                 double isOwed = expenseDAO.getAmountOwedToUser(groupId, member.getUserId());
-                balances.put(member.getUserId(), isOwed - owes);
+                double netBalance = isOwed - owes;
+                balances.add(new Balance(member, netBalance));
             }
 
             // Set attributes for the view

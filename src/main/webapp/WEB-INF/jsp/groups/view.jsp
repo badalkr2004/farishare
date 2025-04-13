@@ -203,7 +203,7 @@
                             <p>
                                 <small class="text-muted">
                                     <i class="fas fa-user"></i> Created by ${group.creator.fullName} on 
-                                    <fmt:formatDate value="${group.createdAt}" pattern="MMM d, yyyy" />
+                                    ${group.createdDate.month} ${group.createdDate.dayOfMonth}, ${group.createdDate.year}
                                 </small>
                             </p>
                             <c:if test="${group.creator.userId == sessionScope.user.userId}">
@@ -250,7 +250,7 @@
                                         <div class="member-card">
                                             <div class="member-avatar">
                                                 <c:choose>
-                                                    <c:when test="${empty member.profileImage}">
+                                                    <c:when test="${empty member.profilePicture}">
                                                         <i class="fas fa-user"></i>
                                                     </c:when>
                                                     <c:otherwise>
@@ -317,7 +317,7 @@
                                                 <div>
                                                     <h6>${expense.description}</h6>
                                                     <div><small class="text-muted">Paid by ${expense.paidBy.fullName}</small></div>
-                                                    <div><small class="text-muted"><fmt:formatDate value="${expense.date}" pattern="MMM d, yyyy" /></small></div>
+                                                    <div><small class="text-muted">${expense.date.month} ${expense.date.dayOfMonth}, ${expense.date.year}</small></div>
                                                 </div>
                                                 <div class="text-end">
                                                     <h5>$${expense.amount}</h5>
