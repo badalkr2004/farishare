@@ -1,25 +1,79 @@
 # FairShareBU
 
-A web application for splitting bills among Bennett University students at campus food outlets.
+A web application for splitting bills and managing expenses among Bennett University students, particularly at campus food outlets.
+
+<p align="center">
+  <img src="src/main/webapp/img/logo.png" alt="FairShareBU Logo" width="150">
+</p>
 
 ## Description
 
-FairShareBU is a Java web application that helps students manage and split expenses among friends for meals and other expenses at campus food outlets. The application allows users to create groups, add expenses, track who owes what, and settle payments efficiently.
+FairShareBU is a Java web application designed to simplify expense sharing among friends. It allows users to create groups, add expenses, track balances, and settle payments efficiently. The application is particularly tailored for Bennett University students who want to manage shared expenses at campus food outlets, apartments, trips, and other group activities.
+
+## Table of Contents
+
+- [Features](#features)
+- [Technologies Used](#technologies-used)
+- [Prerequisites](#prerequisites)
+- [Setup](#setup)
+- [Building and Running](#building-and-running)
+- [Usage Guide](#usage-guide)
+- [Development](#development)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
-- User registration and authentication with JWT tokens
-- Group creation and management
-- Expense tracking and management
-- Expense splitting with custom shares
-- Notifications for new expenses and payments
-- Chat functionality within groups
-- User-friendly interface designed for mobile and desktop
+### User Management
+- **User Registration**: Create an account with email and password
+- **User Authentication**: Secure login with JWT token-based authentication
+- **Profile Management**: Update personal information and profile picture
+- **Account Settings**: Change password and update notification preferences
+
+### Group Management
+- **Create Groups**: Set up expense sharing groups with custom names and descriptions
+- **Invite Members**: Add friends to your expense groups
+- **Group Settings**: Customize group preferences and privacy settings
+- **Group Image**: Upload a representative image for each group
+- **Group Roles**: Group creator has administrative privileges
+
+### Expense Tracking
+- **Add Expenses**: Record expenses with descriptions, amounts, and dates
+- **Expense Categories**: Categorize expenses (food, travel, entertainment, etc.)
+- **Payment Methods**: Track how expenses were paid (cash, UPI, card, etc.)
+- **Receipt Upload**: Attach receipt images to expenses for verification
+- **Expense History**: View all past expenses with detailed information
+
+### Bill Splitting
+- **Equal Splits**: Divide expenses equally among group members
+- **Custom Splits**: Assign different amounts to different members
+- **Percentage Splits**: Split by percentage instead of fixed amounts
+- **Exclude Members**: Option to exclude certain members from specific expenses
+
+### Payment and Settlement
+- **Balance Dashboard**: See at a glance who owes what and to whom
+- **Settlement Suggestions**: Get recommendations on how to settle debts efficiently
+- **Record Payments**: Track when members settle their debts
+- **Payment History**: Maintain a record of all settlements
+- **Settlement Reminders**: Notify users of pending payments
+
+### Notifications and Communication
+- **Real-time Notifications**: Get alerts for new expenses, payments, and group invites
+- **Email Notifications**: Receive important updates via email
+- **Group Chat**: Communicate with group members within the application
+- **Comment on Expenses**: Discuss specific expenses within the group
+
+### Analytics and Reports
+- **Expense Summary**: View expense statistics and trends
+- **Monthly Reports**: Track spending patterns over time
+- **Personal Finance**: See your spending across different groups and categories
+- **Export Data**: Download expense data in CSV format for personal records
 
 ## Technologies Used
 
 - **Backend**: Java Servlets, JSP
-- **Frontend**: HTML, CSS, JavaScript
+- **Frontend**: HTML, CSS, JavaScript, Bootstrap 5
 - **Database**: MySQL
 - **Authentication**: JWT (JSON Web Tokens)
 - **Build Tool**: Maven
@@ -37,14 +91,14 @@ To run this application, you need:
 - JDK 11 or later
 - MySQL Server 8.0 or later
 - Maven (or use the included Maven wrapper)
-- Web browser
+- Web browser (Chrome, Firefox, Edge recommended)
 
 ## Setup
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/badalkr2004/farishare.git
+git clone https://github.com/badalkr2004/fairshare.git
 cd fairsharebu
 ```
 
@@ -57,8 +111,10 @@ cd fairsharebu
    ```
 3. Run the initialization script to create tables:
    ```bash
-   mysql -u root -p fairsharebu < src/main/resources/sql/init.sql
+   mysql -u root -p fairsharebu < src/main/resources/sql/fairshare_schema.sql
    ```
+   
+   This script creates all required tables for the application. The schema file includes optional sample data that you can uncomment for testing purposes.
 
 ### 3. Configuration
 
@@ -119,6 +175,70 @@ Alternatively, you can deploy the WAR file to a standalone Tomcat server:
    http://localhost:8080/fairsharebu-1.0-SNAPSHOT/
    ```
 
+## Usage Guide
+
+### Getting Started
+
+1. **Registration**:
+   - Visit the homepage and click "Sign Up"
+   - Fill in your details (name, email, password)
+   - Verify your email if required
+
+2. **Login**:
+   - Use your credentials to log in
+   - The dashboard will display your groups and recent activities
+
+### Creating and Managing Groups
+
+1. **Create a Group**:
+   - Click the "New Group" button on the dashboard
+   - Enter a group name, description, and optional image
+   - Add members by entering their email addresses or usernames
+   - Click "Create Group" to finalize
+
+2. **Group Dashboard**:
+   - View all group expenses and balances
+   - See who owes what to whom
+   - Access group settings to modify details or add/remove members
+
+### Recording Expenses
+
+1. **Add a New Expense**:
+   - From a group page, click "Add Expense"
+   - Enter expense details (amount, description, date)
+   - Select how to split the expense (equally, custom amounts, percentages)
+   - Upload a receipt image if available
+   - Click "Save" to add the expense
+
+2. **View Expense Details**:
+   - Click on any expense to see full details
+   - View who paid, who owes what, and any comments
+   - Add comments or edit the expense if needed
+
+### Settling Debts
+
+1. **View Balances**:
+   - The "Balances" tab shows who owes money and who is owed
+   - Positive balances indicate money owed to you
+   - Negative balances indicate money you owe others
+
+2. **Settle Up**:
+   - Click "Settle Up" from the group or dashboard
+   - Select the person you're settling with
+   - Enter the amount being paid
+   - Confirm the payment to update balances
+   - Track payment history under "Payments" tab
+
+### Notifications and Communication
+
+1. **Check Notifications**:
+   - The bell icon shows your new notifications
+   - Get alerts for new expenses, payments, and group invites
+
+2. **Group Chat**:
+   - Use the chat feature within groups to discuss expenses
+   - Mention specific expenses or members in discussions
+
 ## Development
 
 ### Project Structure
@@ -135,7 +255,7 @@ Alternatively, you can deploy the WAR file to a standalone Tomcat server:
   - `js/`: JavaScript files
   - `*.jsp`: JSP pages
 
-### Troubleshooting
+## Troubleshooting
 
 - **Port Conflict**: If port 9090 is already in use, modify the port in `pom.xml`:
   ```xml
@@ -153,6 +273,18 @@ Alternatively, you can deploy the WAR file to a standalone Tomcat server:
 - **Database Connection Error**: Ensure MySQL is running and the credentials in `web.xml` are correct.
 
 - **Java Version Issues**: Make sure you're using JDK 11 or later. The application has been tested with Java 11 through 24.
+
+- **Login Problems**: If you're unable to log in, try resetting your password. If that doesn't work, check the server logs for more information.
+
+- **Missing Images**: If images aren't displaying, ensure the upload directories exist and have proper permissions.
+
+## Contributing
+
+Contributions to FairShareBU are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 
 
