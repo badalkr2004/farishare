@@ -31,6 +31,18 @@
             background-color: #2980b9;
             border-color: #2980b9;
         }
+        .balance-info {
+            background-color: #e8f4fd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .balance-positive {
+            color: #28a745;
+        }
+        .balance-negative {
+            color: #dc3545;
+        }
     </style>
 </head>
 <body>
@@ -42,6 +54,18 @@
                 <div class="alert alert-danger">${errorMessage}</div>
             </c:if>
             
+            <c:if test="${not empty amountOwed || not empty amountOwedTo}">
+                <div class="balance-info">
+                    <h5>Balance Summary</h5>
+                    <c:if test="${not empty amountOwed && amountOwed > 0}">
+                        <p>You owe: <span class="balance-negative">₹${amountOwed}</span></p>
+                    </c:if>
+                    <c:if test="${not empty amountOwedTo && amountOwedTo > 0}">
+                        <p>Owed to you: <span class="balance-positive">₹${amountOwedTo}</span></p>
+                    </c:if>
+                </div>
+            </c:if>
+            
             <form action="${pageContext.request.contextPath}/payments" method="post">
                 <input type="hidden" name="action" value="create">
                 
@@ -50,7 +74,7 @@
                     <select id="groupId" name="groupId" class="form-control" required onchange="loadGroupMembers()">
                         <option value="">Select a group</option>
                         <c:forEach items="${groups}" var="group">
-                            <option value="${group.groupId}">${group.name}</option>
+                            <option value="${group.groupId}" ${param.groupId eq group.groupId ? 'selected' : ''}>${group.name}</option>
                         </c:forEach>
                     </select>
                 </div>
@@ -62,7 +86,7 @@
                         <c:if test="${not empty members}">
                             <c:forEach items="${members}" var="member">
                                 <c:if test="${member.userId != user.userId}">
-                                    <option value="${member.userId}">${member.fullName}</option>
+                                    <option value="${member.userId}" ${param.receiverId eq member.userId ? 'selected' : ''}>${member.fullName}</option>
                                 </c:if>
                             </c:forEach>
                         </c:if>
@@ -73,13 +97,15 @@
                     <label for="amount">Amount</label>
                     <div class="input-group">
                         <span class="input-group-text">₹</span>
-                        <input type="number" id="amount" name="amount" class="form-control" step="0.01" min="0.01" required>
+                        <input type="number" id="amount" name="amount" class="form-control" step="0.01" min="0.01" required 
+                               value="${not empty param.amount ? param.amount : ''}">
                     </div>
                 </div>
                 
                 <div class="form-group">
                     <label for="description">Description</label>
-                    <input type="text" id="description" name="description" class="form-control" required placeholder="What's this payment for?">
+                    <input type="text" id="description" name="description" class="form-control" required 
+                           placeholder="What's this payment for?" value="${not empty param.description ? param.description : ''}">
                 </div>
                 
                 <div class="form-group">
@@ -107,6 +133,19 @@
                 window.location.href = '${pageContext.request.contextPath}/payments/create?groupId=' + groupId;
             }
         }
+        
+        // Run on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            // If we have a pre-selected groupId and receiverId from parameters, we don't need to redirect
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasGroupId = urlParams.has('groupId');
+            const hasReceiverId = urlParams.has('receiverId');
+            
+            if (hasGroupId && hasReceiverId) {
+                // Don't redirect, we already have the needed info
+                document.getElementById('loadGroupMembers').disabled = true;
+            }
+        });
     </script>
 </body>
 </html> 

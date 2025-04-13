@@ -5,7 +5,9 @@ import com.fairsharebu.model.Expense;
 import com.fairsharebu.model.Group;
 import com.fairsharebu.model.User;
 import com.fairsharebu.model.Notification;
+import com.fairsharebu.model.Balance;
 import com.fairsharebu.util.JWTUtil;
+import com.fairsharebu.util.DatabaseUtil;
 
 import javax.servlet.ServletException;
 import javax.servlet.annotation.MultipartConfig;
@@ -21,6 +23,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.sql.Connection;
+import java.sql.Statement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -135,7 +140,7 @@ public class ExpenseServlet extends HttpServlet {
                 }
                 request.setAttribute("expense", expense);
                 request.getRequestDispatcher("/WEB-INF/jsp/expenses/view.jsp").forward(request, response);
-            } else if (pathInfo.equals("/create")) {
+            } else if (pathInfo != null && pathInfo.equals("/create")) {
                 // Show the create expense form
                 // Get the group ID if provided
                 String groupIdParam = request.getParameter("groupId");
@@ -164,7 +169,7 @@ public class ExpenseServlet extends HttpServlet {
                 request.setAttribute("userGroups", userGroups);
 
                 request.getRequestDispatcher("/WEB-INF/jsp/expenses/create.jsp").forward(request, response);
-            } else if (pathInfo.startsWith("/view/")) {
+            } else if (pathInfo != null && pathInfo.startsWith("/view/")) {
                 // View a specific expense
                 int expenseId = Integer.parseInt(pathInfo.substring(6));
                 Expense expense = expenseDAO.getExpenseById(expenseId);
@@ -188,7 +193,7 @@ public class ExpenseServlet extends HttpServlet {
 
                 request.setAttribute("expense", expense);
                 request.getRequestDispatcher("/WEB-INF/jsp/expenses/view.jsp").forward(request, response);
-            } else if (pathInfo.startsWith("/edit/")) {
+            } else if (pathInfo != null && pathInfo.startsWith("/edit/")) {
                 // Edit a specific expense
                 int expenseId = Integer.parseInt(pathInfo.substring(6));
                 Expense expense = expenseDAO.getExpenseById(expenseId);
@@ -212,7 +217,7 @@ public class ExpenseServlet extends HttpServlet {
                 request.setAttribute("expense", expense);
                 request.setAttribute("members", members);
                 request.getRequestDispatcher("/WEB-INF/jsp/expenses/edit.jsp").forward(request, response);
-            } else if (pathInfo.equals("/group")) {
+            } else if (pathInfo != null && pathInfo.equals("/group")) {
                 // List all expenses for a specific group
                 int groupId = Integer.parseInt(request.getParameter("id"));
                 Group group = groupDAO.getGroupById(groupId);
@@ -250,13 +255,147 @@ public class ExpenseServlet extends HttpServlet {
                 request.setAttribute("balances", balances);
 
                 request.getRequestDispatcher("/WEB-INF/jsp/expenses/group.jsp").forward(request, response);
-            } else if (pathInfo.equals("/settle")) {
+            } else if (pathInfo != null && pathInfo.equals("/settle")) {
                 // Show the settlement form
-                int groupId = Integer.parseInt(request.getParameter("groupId"));
-                int payerId = Integer.parseInt(request.getParameter("payerId"));
-                int receiverId = Integer.parseInt(request.getParameter("receiverId"));
-                double amount = Double.parseDouble(request.getParameter("amount"));
+                try {
+                    int groupId = Integer.parseInt(request.getParameter("groupId"));
 
+                    // DEBUG: Check table structure
+                    try (Connection conn = DatabaseUtil.getConnection()) {
+                        // Check expense_participants table
+                        try (Statement stmt = conn.createStatement()) {
+                            try (ResultSet rs = stmt.executeQuery("DESCRIBE expense_participants")) {
+                                StringBuilder sb = new StringBuilder("expense_participants columns: ");
+                                while (rs.next()) {
+                                    sb.append(rs.getString("Field")).append(", ");
+                                }
+                                System.out.println(sb.toString());
+                            } catch (Exception e) {
+                                System.out.println("Error describing expense_participants: " + e.getMessage());
+                            }
+                        }
+
+                        // Check expenses table
+                        try (Statement stmt = conn.createStatement()) {
+                            try (ResultSet rs = stmt.executeQuery("DESCRIBE expenses")) {
+                                StringBuilder sb = new StringBuilder("expenses columns: ");
+                                while (rs.next()) {
+                                    sb.append(rs.getString("Field")).append(", ");
+                                }
+                                System.out.println(sb.toString());
+                            } catch (Exception e) {
+                                System.out.println("Error describing expenses: " + e.getMessage());
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error getting connection: " + e.getMessage());
+                    }
+
+                    Group group = groupDAO.getGroupById(groupId);
+
+                    if (group == null) {
+                        request.setAttribute("errorMessage", "Group not found.");
+                        request.getRequestDispatcher("/error.jsp").forward(request, response);
+                        return;
+                    }
+
+                    // Check if the user is a member of the group
+                    List<User> members = groupDAO.getGroupMembers(groupId);
+                    boolean isMember = members.stream().anyMatch(member -> member.getUserId() == user.getUserId());
+
+                    if (!isMember) {
+                        request.setAttribute("errorMessage", "You are not a member of this group.");
+                        request.getRequestDispatcher("/error.jsp").forward(request, response);
+                        return;
+                    }
+
+                    // Initialize settlement selector view
+                    // Calculate balances for each member
+                    List<Balance> balances = new ArrayList<>();
+                    try {
+                        for (User member : members) {
+                            double owes = expenseDAO.getAmountOwedByUser(groupId, member.getUserId());
+                            double isOwed = expenseDAO.getAmountOwedToUser(groupId, member.getUserId());
+                            double netBalance = isOwed - owes;
+                            balances.add(new Balance(member, netBalance));
+                        }
+                    } catch (Exception e) {
+                        // Handle any errors during balance calculation
+                        request.setAttribute("errorMessage", "Error calculating balances: " + e.getMessage());
+                        request.getRequestDispatcher("/error.jsp").forward(request, response);
+                        return;
+                    }
+
+                    // Check if we have specific payer/receiver
+                    int payerId = 0;
+                    int receiverId = 0;
+
+                    try {
+                        if (request.getParameter("payerId") != null) {
+                            payerId = Integer.parseInt(request.getParameter("payerId"));
+                        }
+                        if (request.getParameter("receiverId") != null) {
+                            receiverId = Integer.parseInt(request.getParameter("receiverId"));
+                        }
+                    } catch (NumberFormatException e) {
+                        // If parameters are invalid, just show the form with all members
+                    }
+
+                    if (payerId != 0 && receiverId != 0) {
+                        // We have both payer and receiver, show the settlement form
+                        User payer = null;
+                        User receiver = null;
+
+                        try {
+                            payer = userDAO.get(payerId);
+                            receiver = userDAO.get(receiverId);
+                        } catch (Exception e) {
+                            request.setAttribute("errorMessage", "Error retrieving users: " + e.getMessage());
+                            request.getRequestDispatcher("/error.jsp").forward(request, response);
+                            return;
+                        }
+
+                        if (payer == null || receiver == null) {
+                            request.setAttribute("errorMessage", "Invalid users for settlement.");
+                            request.getRequestDispatcher("/error.jsp").forward(request, response);
+                            return;
+                        }
+
+                        // Calculate the settlement amount
+                        double payerOwes = 0;
+                        try {
+                            payerOwes = expenseDAO.getAmountOwedByUser(groupId, payerId);
+                        } catch (Exception e) {
+                            request.setAttribute("errorMessage", "Error calculating amount owed: " + e.getMessage());
+                            request.getRequestDispatcher("/error.jsp").forward(request, response);
+                            return;
+                        }
+
+                        request.setAttribute("group", group);
+                        request.setAttribute("payer", payer);
+                        request.setAttribute("receiver", receiver);
+                        request.setAttribute("amount", payerOwes);
+
+                        request.getRequestDispatcher("/WEB-INF/jsp/expenses/settle.jsp").forward(request, response);
+                    } else {
+                        // Show selector view
+                        request.setAttribute("group", group);
+                        request.setAttribute("members", members);
+                        request.setAttribute("balances", balances);
+                        request.getRequestDispatcher("/WEB-INF/jsp/expenses/select_settlement.jsp").forward(request,
+                                response);
+                    }
+                } catch (SQLException e) {
+                    request.setAttribute("errorMessage", "Database error: " + e.getMessage());
+                    request.getRequestDispatcher("/error.jsp").forward(request, response);
+                } catch (NumberFormatException e) {
+                    response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid group ID");
+                } catch (Exception e) {
+                    request.setAttribute("errorMessage", "Unexpected error: " + e.getMessage());
+                    request.getRequestDispatcher("/error.jsp").forward(request, response);
+                }
+            } else if ("settle".equals(action)) {
+                int groupId = Integer.parseInt(request.getParameter("groupId"));
                 Group group = groupDAO.getGroupById(groupId);
 
                 if (group == null) {
@@ -276,6 +415,39 @@ public class ExpenseServlet extends HttpServlet {
                 }
 
                 // Get the users involved in the settlement
+                int payerId = 0;
+                int receiverId = 0;
+
+                try {
+                    if (request.getParameter("payerId") != null) {
+                        payerId = Integer.parseInt(request.getParameter("payerId"));
+                    }
+                    if (request.getParameter("receiverId") != null) {
+                        receiverId = Integer.parseInt(request.getParameter("receiverId"));
+                    }
+                } catch (NumberFormatException e) {
+                    // If parameters are invalid, just show the form with all members
+                }
+
+                if (payerId == 0 || receiverId == 0) {
+                    // Show a form to select payer and receiver
+                    // Calculate balances for each member
+                    List<Balance> balances = new ArrayList<>();
+                    for (User member : members) {
+                        double owes = expenseDAO.getAmountOwedByUser(groupId, member.getUserId());
+                        double isOwed = expenseDAO.getAmountOwedToUser(groupId, member.getUserId());
+                        double netBalance = isOwed - owes;
+                        balances.add(new Balance(member, netBalance));
+                    }
+
+                    request.setAttribute("group", group);
+                    request.setAttribute("members", members);
+                    request.setAttribute("balances", balances);
+                    request.getRequestDispatcher("/WEB-INF/jsp/expenses/select_settlement.jsp").forward(request,
+                            response);
+                    return;
+                }
+
                 User payer = userDAO.get(payerId);
                 User receiver = userDAO.get(receiverId);
 
@@ -493,10 +665,14 @@ public class ExpenseServlet extends HttpServlet {
                 return;
             }
 
+            System.out.println("Starting handleSettleExpense...");
             int groupId = Integer.parseInt(request.getParameter("groupId"));
             int payerId = Integer.parseInt(request.getParameter("payerId"));
             int receiverId = Integer.parseInt(request.getParameter("receiverId"));
             double amount = Double.parseDouble(request.getParameter("amount"));
+
+            System.out.println("Parameters: groupId=" + groupId + ", payerId=" + payerId +
+                    ", receiverId=" + receiverId + ", amount=" + amount);
 
             // Check if the user is a member of the group
             if (!groupDAO.isUserMemberOfGroup(currentUser.getUserId(), groupId)) {
@@ -504,42 +680,88 @@ public class ExpenseServlet extends HttpServlet {
                 return;
             }
 
-            // Get the users involved in the settlement
-            User payer = userDAO.get(payerId);
-            User receiver = userDAO.get(receiverId);
+            // Instead of creating the settlement expense internally,
+            // redirect to the payment creation page with pre-filled values
+            String paymentCreateUrl = request.getContextPath() + "/payments/create?groupId=" + groupId +
+                    "&receiverId=" + receiverId +
+                    "&amount=" + amount +
+                    "&description=Settlement payment";
 
-            if (payer == null || receiver == null) {
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid user IDs");
-                return;
-            }
+            response.sendRedirect(paymentCreateUrl);
+            return;
 
-            // Get the group
-            Group group = groupDAO.getGroupById(groupId);
-            if (group == null) {
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid group ID");
-                return;
-            }
-
-            // Create a settlement expense
-            Expense expense = new Expense();
-            expense.setDescription("Settlement payment from " + payer.getFullName() + " to " + receiver.getFullName());
-            expense.setAmount(amount);
-            expense.setPaidBy(payer);
-            expense.setGroup(group);
-            expense.setCreatedAt(LocalDateTime.now());
-            expense.setPaymentMethod("Settlement");
-            expense.setStatus("SETTLED");
-
-            // Add participant who receives the money
-            expense.addParticipant(receiver);
-            expense.setShare(receiver, amount);
-
-            // Add the expense to the database
-            expenseDAO.addExpense(expense);
-
-            response.sendRedirect(request.getContextPath() + "/expenses/group?id=" + groupId);
-        } catch (SQLException | NumberFormatException e) {
-            throw new ServletException("Error handling settle expense", e);
+            /*
+             * The following code is kept for reference but commented out as we'll now use
+             * the payment feature
+             * // Get the users involved in the settlement
+             * User payer = userDAO.get(payerId);
+             * User receiver = userDAO.get(receiverId);
+             * 
+             * if (payer == null || receiver == null) {
+             * System.out.println("Invalid users: payer=" + payer + ", receiver=" +
+             * receiver);
+             * response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid user IDs");
+             * return;
+             * }
+             * 
+             * // Get the group
+             * Group group = groupDAO.getGroupById(groupId);
+             * if (group == null) {
+             * System.out.println("Invalid group: " + groupId);
+             * response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid group ID");
+             * return;
+             * }
+             * 
+             * // Create a settlement expense
+             * Expense expense = new Expense();
+             * expense.setDescription("Settlement payment from " + payer.getFullName() +
+             * " to " + receiver.getFullName());
+             * expense.setAmount(amount);
+             * expense.setPaidBy(payer);
+             * expense.setGroup(group);
+             * expense.setCreatedAt(LocalDateTime.now());
+             * expense.setPaymentMethod("Settlement");
+             * expense.setStatus("SETTLED");
+             * 
+             * System.out.println("Created expense: " + expense.getDescription() +
+             * ", amount=" + expense.getAmount());
+             * 
+             * // Add participant who receives the money
+             * expense.addParticipant(receiver);
+             * expense.setShare(receiver, amount);
+             * 
+             * System.out.println("Adding expense to database...");
+             * 
+             * try {
+             * // Add the expense to the database
+             * expenseDAO.addExpense(expense);
+             * System.out.println("Successfully added settlement expense!");
+             * 
+             * response.sendRedirect(request.getContextPath() + "/expenses/group?id=" +
+             * groupId);
+             * } catch (SQLException e) {
+             * System.out.println("Error adding expense: " + e.getMessage());
+             * // Check if this is a column name issue
+             * if (e.getMessage().contains("Unknown column")) {
+             * request.setAttribute("errorMessage", "Database schema error: " +
+             * e.getMessage() +
+             * ". Please check your database structure.");
+             * } else {
+             * request.setAttribute("errorMessage", "Error adding settlement: " +
+             * e.getMessage());
+             * }
+             * request.getRequestDispatcher("/error.jsp").forward(request, response);
+             * }
+             */
+        } catch (SQLException e) {
+            System.out.println("SQL Exception: " + e.getMessage());
+            throw e;
+        } catch (NumberFormatException e) {
+            System.out.println("Number Format Exception: " + e.getMessage());
+            throw new ServletException("Error handling settle expense - invalid parameters", e);
+        } catch (Exception e) {
+            System.out.println("Unexpected Exception: " + e.getMessage());
+            throw new ServletException("Unexpected error handling settle expense", e);
         }
     }
 

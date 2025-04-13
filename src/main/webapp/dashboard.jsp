@@ -154,8 +154,26 @@
                                 <h5>Total Balance</h5>
                             </div>
                             <div class="card-body">
-                                <h3 class="card-title">₹ 0.00</h3>
-                                <p class="card-text">You're all settled up!</p>
+                                <c:choose>
+                                    <c:when test="${not empty netBalance}">
+                                        <h3 class="card-title ${netBalance >= 0 ? 'text-success' : 'text-danger'}">₹ ${netBalance}</h3>
+                                        <c:choose>
+                                            <c:when test="${netBalance > 0}">
+                                                <p class="card-text">Overall, you are owed money.</p>
+                                            </c:when>
+                                            <c:when test="${netBalance < 0}">
+                                                <p class="card-text">Overall, you owe money.</p>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <p class="card-text">You're all settled up!</p>
+                                            </c:otherwise>
+                                        </c:choose>
+                                    </c:when>
+                                    <c:otherwise>
+                                        <h3 class="card-title">₹ 0.00</h3>
+                                        <p class="card-text">You're all settled up!</p>
+                                    </c:otherwise>
+                                </c:choose>
                             </div>
                         </div>
                     </div>
@@ -166,8 +184,18 @@
                                 <h5>You Owe</h5>
                             </div>
                             <div class="card-body">
-                                <h3 class="card-title">₹ 0.00</h3>
-                                <p class="card-text">You don't owe anything.</p>
+                                <c:choose>
+                                    <c:when test="${not empty totalOwed && totalOwed > 0}">
+                                        <h3 class="card-title text-danger">₹ ${totalOwed}</h3>
+                                        <p class="card-text">
+                                            <a href="${pageContext.request.contextPath}/payments/create" class="btn btn-sm btn-primary">Pay Now</a>
+                                        </p>
+                                    </c:when>
+                                    <c:otherwise>
+                                        <h3 class="card-title">₹ 0.00</h3>
+                                        <p class="card-text">You don't owe anything.</p>
+                                    </c:otherwise>
+                                </c:choose>
                             </div>
                         </div>
                     </div>
@@ -178,8 +206,18 @@
                                 <h5>You Are Owed</h5>
                             </div>
                             <div class="card-body">
-                                <h3 class="card-title">₹ 0.00</h3>
-                                <p class="card-text">No one owes you money.</p>
+                                <c:choose>
+                                    <c:when test="${not empty totalOwing && totalOwing > 0}">
+                                        <h3 class="card-title text-success">₹ ${totalOwing}</h3>
+                                        <p class="card-text">
+                                            <a href="${pageContext.request.contextPath}/expenses" class="btn btn-sm btn-secondary">View Details</a>
+                                        </p>
+                                    </c:when>
+                                    <c:otherwise>
+                                        <h3 class="card-title">₹ 0.00</h3>
+                                        <p class="card-text">No one owes you money.</p>
+                                    </c:otherwise>
+                                </c:choose>
                             </div>
                         </div>
                     </div>

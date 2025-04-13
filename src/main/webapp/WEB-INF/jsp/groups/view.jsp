@@ -130,7 +130,7 @@
                         <a class="nav-link" href="${pageContext.request.contextPath}/expenses/"><i class="fas fa-money-bill-wave"></i> Expenses</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#"><i class="fas fa-calculator"></i> Settle Up</a>
+                        <a class="nav-link" href="${pageContext.request.contextPath}/expenses?action=settle&groupId=${group.groupId}"><i class="fas fa-calculator"></i> Settle Up</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="${pageContext.request.contextPath}/notifications/"><i class="fas fa-bell"></i> Notifications</a>

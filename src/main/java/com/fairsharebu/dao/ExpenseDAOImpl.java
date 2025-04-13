@@ -98,29 +98,56 @@ public class ExpenseDAOImpl implements ExpenseDAO {
                 "receipt_image, payment_method, status) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
-        try (Connection conn = DatabaseUtil.getConnection();
-                PreparedStatement stmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+        Connection conn = null;
+        try {
+            conn = DatabaseUtil.getConnection();
+            conn.setAutoCommit(false); // Start transaction
 
-            stmt.setInt(1, expense.getGroup().getGroupId());
-            stmt.setInt(2, expense.getPaidBy().getUserId());
-            stmt.setDouble(3, expense.getAmount());
-            stmt.setString(4, expense.getDescription());
-            stmt.setTimestamp(5, Timestamp.valueOf(expense.getCreatedAt()));
-            stmt.setString(6, expense.getReceiptImage());
-            stmt.setString(7, expense.getPaymentMethod());
-            stmt.setString(8, expense.getStatus());
+            try (PreparedStatement stmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+                stmt.setInt(1, expense.getGroup().getGroupId());
+                stmt.setInt(2, expense.getPaidBy().getUserId());
+                stmt.setDouble(3, expense.getAmount());
+                stmt.setString(4, expense.getDescription());
+                stmt.setTimestamp(5, Timestamp.valueOf(expense.getCreatedAt()));
+                stmt.setString(6, expense.getReceiptImage());
+                stmt.setString(7, expense.getPaymentMethod());
+                stmt.setString(8, expense.getStatus());
 
-            stmt.executeUpdate();
+                stmt.executeUpdate();
 
-            try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
-                if (generatedKeys.next()) {
-                    int expenseId = generatedKeys.getInt(1);
-                    expense.setExpenseId(expenseId);
+                try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        int expenseId = generatedKeys.getInt(1);
+                        expense.setExpenseId(expenseId);
 
-                    // Add expense participants and their shares
-                    saveExpenseParticipants(expense, conn);
-                } else {
-                    throw new SQLException("Creating expense failed, no ID obtained.");
+                        // Add expense participants
+                        saveExpenseParticipants(expense, conn);
+
+                        // Commit transaction
+                        conn.commit();
+                    } else {
+                        throw new SQLException("Creating expense failed, no ID obtained.");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Error with SQL query: " + e.getMessage());
+
+            if (conn != null) {
+                try {
+                    conn.rollback(); // Rollback the transaction
+                } catch (SQLException ex) {
+                    System.out.println("Error rolling back transaction: " + ex.getMessage());
+                }
+            }
+            throw e;
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true); // Reset auto-commit
+                    conn.close();
+                } catch (SQLException e) {
+                    System.out.println("Error closing connection: " + e.getMessage());
                 }
             }
         }
@@ -185,7 +212,8 @@ public class ExpenseDAOImpl implements ExpenseDAO {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getDouble("total_owed");
+                    double amount = rs.getDouble("total_owed");
+                    return amount;
                 }
             }
         }
@@ -209,7 +237,8 @@ public class ExpenseDAOImpl implements ExpenseDAO {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getDouble("total_to_receive");
+                    double amount = rs.getDouble("total_to_receive");
+                    return amount;
                 }
             }
         }
