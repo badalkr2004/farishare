@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 /**
  * Servlet to handle expense-related requests
@@ -483,30 +484,62 @@ public class ExpenseServlet extends HttpServlet {
 
     private void handleSettleExpense(HttpServletRequest request, HttpServletResponse response, User user)
             throws ServletException, IOException, SQLException {
-        int expenseId = Integer.parseInt(request.getParameter("id"));
-        Expense expense = expenseDAO.getExpenseById(expenseId);
+        try {
+            HttpSession session = request.getSession();
+            User currentUser = (User) session.getAttribute("user");
+            if (currentUser == null) {
+                response.sendRedirect("login");
+                return;
+            }
 
-        if (expense == null) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
+            int groupId = Integer.parseInt(request.getParameter("groupId"));
+            int payerId = Integer.parseInt(request.getParameter("payerId"));
+            int receiverId = Integer.parseInt(request.getParameter("receiverId"));
+            double amount = Double.parseDouble(request.getParameter("amount"));
+
+            // Check if the user is a member of the group
+            if (!groupDAO.isUserMemberOfGroup(currentUser.getUserId(), groupId)) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "You are not a member of this group");
+                return;
+            }
+
+            // Get the users involved in the settlement
+            User payer = userDAO.get(payerId);
+            User receiver = userDAO.get(receiverId);
+
+            if (payer == null || receiver == null) {
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid user IDs");
+                return;
+            }
+
+            // Get the group
+            Group group = groupDAO.getGroupById(groupId);
+            if (group == null) {
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Invalid group ID");
+                return;
+            }
+
+            // Create a settlement expense
+            Expense expense = new Expense();
+            expense.setDescription("Settlement payment from " + payer.getFullName() + " to " + receiver.getFullName());
+            expense.setAmount(amount);
+            expense.setPaidBy(payer);
+            expense.setGroup(group);
+            expense.setCreatedAt(LocalDateTime.now());
+            expense.setPaymentMethod("Settlement");
+            expense.setStatus("SETTLED");
+
+            // Add participant who receives the money
+            expense.addParticipant(receiver);
+            expense.setShare(receiver, amount);
+
+            // Add the expense to the database
+            expenseDAO.addExpense(expense);
+
+            response.sendRedirect("group?action=view&groupId=" + groupId);
+        } catch (SQLException | NumberFormatException e) {
+            throw new ServletException("Error handling settle expense", e);
         }
-
-        int userId = user.getUserId();
-        int groupId = Integer.parseInt(request.getParameter("groupId"));
-
-        // Calculate amounts for the settlement
-        double amountOwed = expenseDAO.getAmountOwedByUser(groupId, userId);
-        double amountToReceive = expenseDAO.getAmountOwedToUser(groupId, userId);
-
-        if (amountOwed <= 0) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "No amount to settle");
-            return;
-        }
-
-        // Process the settlement logic here
-        // You might want to create a new transaction or mark expenses as settled
-
-        response.sendRedirect(request.getContextPath() + "/expenses?action=list&groupId=" + groupId);
     }
 
     private String getFileExtension(Part part) {

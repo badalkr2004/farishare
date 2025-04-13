@@ -33,16 +33,28 @@ public class DatabaseUtil {
                     dataSource.setUsername("root");
                     dataSource.setPassword("mypass");
 
-                    // Connection pool configuration
-                    dataSource.setInitialSize(5);
-                    dataSource.setMaxTotal(20);
-                    dataSource.setMaxIdle(10);
-                    dataSource.setMinIdle(5);
-                    dataSource.setMaxWaitMillis(10000);
+                    // Improved connection pool configuration
+                    dataSource.setInitialSize(10);
+                    dataSource.setMaxTotal(50);
+                    dataSource.setMaxIdle(25);
+                    dataSource.setMinIdle(10);
+                    dataSource.setMaxWaitMillis(30000);
 
-                    // Test connections before using them
+                    // Added auto-recovery settings
+                    dataSource.setRemoveAbandonedOnBorrow(true);
+                    dataSource.setRemoveAbandonedOnMaintenance(true);
+                    dataSource.setRemoveAbandonedTimeout(60);
+                    dataSource.setLogAbandoned(true);
+
+                    // Added connection validation
                     dataSource.setTestOnBorrow(true);
                     dataSource.setValidationQuery("SELECT 1");
+                    dataSource.setValidationQueryTimeout(5);
+
+                    // Set a limit to prevent too many connections
+                    dataSource.setDefaultAutoCommit(true);
+                    dataSource.setEnableAutoCommitOnReturn(true);
+                    dataSource.setFastFailValidation(true);
                 }
             }
         }

@@ -24,6 +24,11 @@
         <param-value>aryan</param-value>
     </context-param>
     
+    <!-- Listener for database connection pool initialization and cleanup -->
+    <listener>
+        <listener-class>com.fairsharebu.util.DatabaseInitListener</listener-class>
+    </listener>
+    
     <!-- Session Configuration -->
     <session-config>
         <session-timeout>30</session-timeout>
